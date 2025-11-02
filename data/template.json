@@ -1,0 +1,58 @@
+[
+  {
+    "word": "example",
+    "phonetic": {
+      "uk": "/ɪɡˈzɑːmpl/",
+      "us": "/ɪɡˈzæmpl/"
+    },
+    "partsOfSpeech": [
+      {
+        "pos": "noun",
+        "meanings": [
+          {
+            "definition": "例子；范例",
+            "difficulty": 2,
+            "examples": [
+              "This is a good example of modern architecture.",
+              "Let me give you an example to illustrate my point."
+            ]
+          }
+        ]
+      },
+      {
+        "pos": "verb",
+        "meanings": [
+          {
+            "definition": "举例说明；作为…的示范",
+            "difficulty": 3,
+            "examples": [
+              "She exampled her theory with real cases."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "word": "template",
+    "phonetic": {
+      "uk": "/ˈtempleɪt/",
+      "us": "/ˈtempleɪt/"
+    },
+    "partsOfSpeech": [
+      {
+        "pos": "noun",
+        "meanings": [
+          {
+            "definition": "模板；样板",
+            "difficulty": 3,
+            "examples": [
+              "Use this document as a template for your report.",
+              "The website provides free resume templates."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
