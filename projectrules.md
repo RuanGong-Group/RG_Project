@@ -4,15 +4,18 @@ type: "manual"
 
 # 项目核心开发准则
 
-**版本:** v2.0
-**日期:** 2025年10月26日
+**版本:** v2.1
+**日期:** 2025年11月6日
 **核心思想:** 本准则旨在确保AI助手在开发过程中的行为是可预测、可靠且高质量的。它基于用户的核心要求：避免模型幻觉、防止随意生成、行动前复述想法、及时沟通、同步文档。
 
 ---
 
 ### 1. 沟通与确认原则 (Communication & Confirmation)
 
-1.1. **完整阅读核心文档 (Complete Document Reading):** **【最高优先级】** 在开始任何新任务或阶段性工作之前，必须完整阅读所有核心设计文档（`PRD.md`、`Technical_Design_Document.md`、`Database_Design_Document.md`、`Design_Thought_Summary.md`），而不是仅仅搜索或片段式阅读。这是确保理解项目全貌、避免设计偏差的根本保证。
+1.1. **完整阅读核心文档 (Complete Document Reading):** **【最高优先级】** 在开始任何新任务或阶段性工作之前，必须完整阅读所有核心设计文档。
+    - **当前最新版本:** `PRD_V2.md`, `Database_Design_Document_V2.md`
+    - **历史参考:** `PRD.md`、`Technical_Design_Document.md`、`Database_Design_Document.md`、`Design_Thought_Summary.md`
+    - **原则:** 当新版文档（如 V2）存在时，必须以新版为准。这是确保理解项目全貌、避免设计偏差的根本保证。
 
 1.2. **复述确认 (Restate and Confirm):** 在执行任何实质性操作（如修改文件、创建文件、执行关键命令）之前，必须先用自己的话清晰地复述我的理解和即将执行的详细计划。
 
@@ -36,23 +39,38 @@ type: "manual"
 
 ---
 
-### 3. 文档与记录原则 (Documentation & Record-Keeping)
+### 3. 文档同步原则 (Documentation Synchronization)
 
-3.1. **文档同步 (Documentation Synchronization):** **【最高优先级】** 任何对架构、数据库或核心逻辑的修改，都**必须**同步更新到所有相关的设计文档中 (`PRD.md`, `Technical_Design_Document.md`, `Database_Design_Document.md`, `Design_Thought_Summary.md`)。
+3.1. **设计先行 (Design First):** 在进行任何重要功能的代码实现之前，必须先更新或创建相关的设计文档（PRD, 技术设计文档, 数据库设计文档）。
 
-3.2. **版本控制 (Version Control):** 在修改任何文档时，必须更新文档头部的版本号和修订记录，清晰地说明本次修改的核心内容。
+3.2. **代码与文档一致 (Code-Doc Consistency):** 代码实现必须与最新的设计文档保持一致。如果实现过程中发现需要对设计进行调整，应先更新文档，并与我（用户）沟通确认。
 
-3.3. **保留关键信息 (Preserve Context):** 修改文档时，应在保留不变的关键信息的基础上进行补充和修改，而不是大段删除，确保设计思想的延续性。
+3.3. **注释即文档 (Comments as Documentation):** 对复杂的逻辑、算法或数据结构，应在代码中添加清晰的注释。
 
----
+### 4. 数据结构验证规则 (Data Structure Validation)
 
-### 4. 思维与行为准则 (Mindset & Behavior)
+4.1. **严格遵循 Prisma Schema:** 所有与数据库交互的代码，都必须严格遵循 `prisma/schema.prisma` 的定义。
 
-4.1. **基于事实 (Fact-Based):** 所有的回答、计划和操作都必须基于项目文件、我们的对话历史和你的明确指令。
+4.2. **V2 核心模型规则:**
+    - **`Word` 模型:**
+        - `word` 字段必须是唯一的、小写的、经过 trim 处理的。
+        - `lemma` 字段用于存储单词的原型。如果一个单词本身就是原型，则该字段为 `null`。所有非原型的单词（如 `went`, `better`）都应指向其原型（`go`, `good`）。
+    - **`Meaning` 模型:**
+        - `word_id` 必须关联到一个有效的 `Word` 记录。
+        - `part_of_speech` 和 `definition` 是核心含义的必要字段。
+        - `extra` 字段 (JSON 类型) 用于存储所有附加信息，如英文定义 (`definition_en`)、标签 (`tags`)、音标 (`phonetic`) 等。在写入前，必须确保其结构符合 `Database_Design_Document_V2.md` 中定义的规范。
+    - **`ExamplePool` 模型:**
+        - `sentence` 字段在入库前必须经过清洗，去除不必要的空白和特殊字符。
+        - `embedding` 字段的生成和使用必须遵循技术设计文档中的向量语义模型规范。
 
-4.2. **逻辑严谨 (Logical Rigor):** 提出的任何建议或设计（如 `meaning_id` 的想法）都必须经过深思熟虑，并能清晰地阐述其背后的逻辑和价值。
+4.3. **数据导入脚本 (`import-*.ts`):**
+    - **原子性:** 单词及其所有相关数据（词义、例句、变形关系）的导入应在一个事务中完成。
+    - **幂等性:** 脚本应能够重复执行而不会产生重复数据或错误。在插入新数据前，必须检查数据是否已存在。
+    - **清晰的日志:** 必须为每个导入任务记录详细的日志，包括成功、失败、跳过的单词数量。
 
-4.3. **禁止幻觉 (No Hallucination):** 严禁创造不存在的事实、文件内容或操作结果。如果不确定，就承认不确定并去核实。
+4.4. **API 响应格式:**
+    - 所有 API 响应都必须使用 `src/utils/response.ts` 中的标准化格式进行包装。
+    - 返回给前端的数据应严格遵循 `frontend_api_spec.md` 中定义的结构，避免泄露不必要的后端细节。
 
 ---
 
