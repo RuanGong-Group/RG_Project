@@ -64,16 +64,15 @@ export interface Pronunciation {
 export interface Example {
   id: number;
   sentence: string;
-  highlightWord: string;
-  source: string;
-  difficulty: number;
+  sourceType: string;
+  sourceDetail: string;
 }
 
 export interface Meaning {
   meaningId: number;
   partOfSpeech: string;
   definition: string;
-  relatedInfo: string | { synonyms?: string[]; examples?: string[] } | null;  // 可能是字符串、对象或 null
+  extra: any | null;
   examples: Example[];
 }
 
@@ -93,7 +92,7 @@ export interface LearningContent {
   pronunciation: Pronunciation;
   partOfSpeech: string;
   definition: string;
-  relatedInfo: any | null;
+  extra: any | null;
   examples: Example[];
   masteryFocus: 'recognition' | 'production';
   bookTag: string;
@@ -118,7 +117,7 @@ export interface ReviewItem {
   pronunciation: Pronunciation;
   partOfSpeech: string;
   definition: string;
-  relatedInfo: string | { synonyms?: string[]; examples?: string[] } | null;
+  extra: any | null;
   examples: Example[];
   reviewMode: 'recognition' | 'production';
   masteryLevel: number;
@@ -138,11 +137,8 @@ export interface ReviewSubmitRequest {
 
 export interface ReviewSubmitResponse {
   meaningId: number;
-  isCorrect: boolean;
   masteryLevel: number;
   nextReviewAt: string;
-  consecutiveCorrect: number;
-  reviewCount: number;
 }
 
 export interface MeaningSubmitRequest {
@@ -356,34 +352,42 @@ export interface UpdateDailyGoalRequest {
 }
 
 // ============================================
-// Learning Session 相关类型
+// Learning Session 相关类型 (V2)
 // ============================================
 
-// NextWordResponse 复用已有的 WordToLearn 类型结构
-export type NextWordResponse = WordToLearn;
+/**
+ * GET /api/learning/word/next 的响应类型。
+ * 可能是包含单词数据的 WordToLearn 对象，
+ * 或一个表示特殊状态的 code 对象。
+ */
+export type NextWordResponse = WordToLearn | {
+  code: 'REVIEW_FIRST' | 'GOAL_MET' | 'BOOK_COMPLETED';
+  message: string;
+};
 
-export interface SubmitMeaningRequest {
-  meaningId: number;
-  isCorrect: boolean;  // true = 认识，false = 不认识
+/**
+ * POST /api/learning/progress 的请求体类型。
+ * 一次性提交一个单词下所有词义的学习结果。
+ */
+export interface SubmitProgressRequest {
+  results: {
+    meaningId: number;
+    isCorrect: boolean;
+  }[];
 }
 
-export interface SubmitMeaningResponse {
-  meaningId: number;
-  masteryLevel: number;
-  nextReviewAt: string;
-  consecutiveCorrect: number;
-  reviewCount: number;
-}
-
-export interface CompleteWordRequest {
+/**
+ * POST /api/learning/progress 的响应类型。
+ */
+export interface SubmitProgressResponse {
   wordId: number;
-}
-
-export interface CompleteWordResponse {
-  wordId: number;
-  word: string;
   totalMeanings: number;
-  learnedMeanings: number;
+  correctMeanings: number;
+  progressUpdates: {
+    meaningId: number;
+    masteryLevel: number;
+    nextReviewAt: string;
+  }[];
 }
 
 // ============================================

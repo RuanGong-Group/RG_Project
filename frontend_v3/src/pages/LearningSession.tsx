@@ -1,228 +1,186 @@
-/**
- * 学习会话页面 - 选择题模式
- * TODO: 后续需要后端实现智能干扰项生成
- */
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { learningApi } from '../services/api';
-import type { NextWordResponse } from '../types/api';
+import type { WordToLearn } from '../types/api';
+
+// 统一管理页面状态
+type SessionStatus = 'loading' | 'error' | 'learning' | 'review_first' | 'goal_met' | 'book_completed' | 'summary';
+// 定义学习结果的数据结构
+type LearningResult = { meaningId: number; isCorrect: boolean };
 
 /**
- * 辅助函数：不区分大小写地高亮句子中的单词
+ * 辅助函数：高亮句子中的单词
  */
-function splitSentenceWithHighlight(sentence: string, highlightWord: string): {
-  parts: string[];
-  actualWords: string[];
-} {
-  if (!highlightWord) {
-    return { parts: [sentence], actualWords: [] };
+function HighlightedSentence({ sentence, highlight }: { sentence: string; highlight: string }) {
+  if (!highlight || !sentence) {
+    return <span>{sentence}</span>;
   }
-
-  const regex = new RegExp(`(${highlightWord})`, 'gi');
-  const parts = sentence.split(regex);
-  
-  const filteredParts: string[] = [];
-  const filteredWords: string[] = [];
-  
-  for (let i = 0; i < parts.length; i++) {
-    if (i % 2 === 0) {
-      filteredParts.push(parts[i]);
-    } else {
-      filteredParts.push('');
-      filteredWords.push(parts[i]);
-    }
-  }
-  
-  return { parts: filteredParts, actualWords: filteredWords };
+  const parts = sentence.split(new RegExp(`(${highlight})`, 'gi'));
+  return (
+    <span>
+      {parts.map((part, i) =>
+        part.toLowerCase() === highlight.toLowerCase() ? (
+          <span key={i} className="font-bold text-blue-600 bg-yellow-100 px-1">
+            {part}
+          </span>
+        ) : (
+          part
+        )
+      )}
+    </span>
+  );
 }
 
 export default function LearningSession() {
   const navigate = useNavigate();
-  
-  // 状态管理
-  const [loading, setLoading] = useState(true);
+
+  // ================= V2 状态管理 =================
+  const [status, setStatus] = useState<SessionStatus>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [wordData, setWordData] = useState<NextWordResponse | null>(null);
+  const [wordData, setWordData] = useState<WordToLearn | null>(null);
   const [currentMeaningIndex, setCurrentMeaningIndex] = useState(0);
-  const [completedMeanings, setCompletedMeanings] = useState<Set<number>>(new Set());
-  
-  // 选择题状态
+  const [learningResults, setLearningResults] = useState<LearningResult[]>([]);
+
+  // 交互状态
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [isCorrectAnswer, setIsCorrectAnswer] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  
-  // 当前词义的选项（固定，不会重新生成）
+
+  // 选项状态
   const [quizOptions, setQuizOptions] = useState<string[]>([]);
   const [quizCorrectIndex, setQuizCorrectIndex] = useState<number>(0);
-  
-  // 单词总结页显示状态
-  const [showWordSummary, setShowWordSummary] = useState(false);
 
-  // TODO: 临时硬编码干扰项，后续需要后端生成
-  const generateOptions = (correctDefinition: string) => {
-    const distractors = [
-      "测试；考试",
-      "练习；实践",
-      "经验；体验"
-    ];
-    
-    const options = [correctDefinition, ...distractors];
-    // 随机打乱顺序
-    const shuffled = options.sort(() => Math.random() - 0.5);
-    return {
-      options: shuffled,
-      correctIndex: shuffled.indexOf(correctDefinition)
-    };
-  };
+  // ================= V2 核心逻辑 =================
 
-  // 加载下一个单词
-  const loadNextWord = async () => {
+  // 1. 加载下一个单词或状态
+  const loadNextWord = useCallback(async () => {
+    setStatus('loading');
+    setError(null);
+    setWordData(null); // 重置单词数据
     try {
-      setLoading(true);
-      setError(null);
       const data = await learningApi.getNextWord();
-      setWordData(data);
-      setCurrentMeaningIndex(0);
-      setSelectedOption(null);
-      setShowFeedback(false);
-      setCompletedMeanings(new Set());
-      
-      // 保存到 sessionStorage（用于页面刷新恢复）
-      sessionStorage.setItem('currentLearningWord', JSON.stringify({
-        wordData: data,
-        currentMeaningIndex: 0,
-        completedMeanings: []
-      }));
-    } catch (err: any) {
-      if (err.message?.includes('恭喜') || err.message?.includes('学习完')) {
-        setError('学习完成');
+      if ('code' in data) {
+        // 处理特殊状态码
+        setError(data.message);
+        if (data.code === 'REVIEW_FIRST') setStatus('review_first');
+        else if (data.code === 'GOAL_MET') setStatus('goal_met');
+        else if (data.code === 'BOOK_COMPLETED') setStatus('book_completed');
       } else {
-        setError(err.message || '加载失败');
+        // 成功获取单词数据
+        setWordData(data);
+        setCurrentMeaningIndex(0);
+        setLearningResults([]);
+        setSelectedOption(null);
+        setShowFeedback(false);
+        setStatus('learning');
       }
-    } finally {
-      setLoading(false);
+    } catch (err: any) {
+      setError(err.message || '加载失败，请稍后重试');
+      setStatus('error');
     }
-  };
-
-  useEffect(() => {
-    // 尝试从 sessionStorage 恢复状态
-    const saved = sessionStorage.getItem('currentLearningWord');
-    if (saved) {
-      try {
-        const { wordData: savedWordData, currentMeaningIndex: savedIndex, completedMeanings: savedCompleted } = JSON.parse(saved);
-        setWordData(savedWordData);
-        setCurrentMeaningIndex(savedIndex);
-        setCompletedMeanings(new Set(savedCompleted));
-        setLoading(false);
-        return;
-      } catch (err) {
-        console.error('恢复学习状态失败:', err);
-        sessionStorage.removeItem('currentLearningWord');
-      }
-    }
-    
-    // 没有保存的状态，加载新单词
-    loadNextWord();
   }, []);
 
-  // 当词义变化时生成选项
+  // 初始化加载
   useEffect(() => {
-    if (!wordData) return;
-    const currentMeaning = wordData.meanings[currentMeaningIndex];
-    const { options, correctIndex } = generateOptions(currentMeaning.definition);
-    setQuizOptions(options);
-    setQuizCorrectIndex(correctIndex);
-  }, [wordData, currentMeaningIndex]);
+    loadNextWord();
+  }, [loadNextWord]);
 
-  // 选择选项
+  // 2. 为当前词义生成选择题选项
+  const generateOptions = useCallback((correctDefinition: string, allMeanings: WordToLearn['meanings']) => {
+    // 从所有词义中选择干扰项，排除当前正确答案
+    const distractors = allMeanings
+      .map(m => m.definition)
+      .filter(d => d !== correctDefinition);
+
+    // 随机打乱干扰项并取前3个
+    const shuffledDistractors = distractors.sort(() => Math.random() - 0.5).slice(0, 3);
+    
+    const options = [correctDefinition, ...shuffledDistractors];
+    
+    // 如果选项不足4个，用通用占位符补充
+    const placeholders = ["近义词", "反义词", "相关词"];
+    let i = 0;
+    while (options.length < 4 && i < placeholders.length) {
+        if (!options.includes(placeholders[i])) {
+            options.push(placeholders[i]);
+        }
+        i++;
+    }
+
+    const shuffled = options.sort(() => Math.random() - 0.5);
+    setQuizOptions(shuffled);
+    setQuizCorrectIndex(shuffled.indexOf(correctDefinition));
+  }, []);
+
+  // 词义变化时，重新生成选项
+  useEffect(() => {
+    if (status === 'learning' && wordData && wordData.meanings[currentMeaningIndex]) {
+      const currentMeaning = wordData.meanings[currentMeaningIndex];
+      generateOptions(currentMeaning.definition, wordData.meanings);
+    }
+  }, [wordData, currentMeaningIndex, status, generateOptions]);
+
+
+  // 3. 处理用户交互
   const handleSelectOption = (index: number) => {
-    if (showFeedback || submitting) return;
+    if (showFeedback) return;
     setSelectedOption(index);
   };
 
-  // 确认选择
   const handleConfirmSelection = () => {
     if (selectedOption === null || !wordData) return;
-    
     const isCorrect = selectedOption === quizCorrectIndex;
     
+    // 暂存当前词义的学习结果
+    const currentMeaning = wordData.meanings[currentMeaningIndex];
+    const newResult: LearningResult = { meaningId: currentMeaning.meaningId, isCorrect };
+    setLearningResults(prev => [...prev, newResult]);
+
     setIsCorrectAnswer(isCorrect);
     setShowFeedback(true);
   };
 
-  // 继续下一个
-  const handleNext = async () => {
-    if (!wordData || submitting) return;
+  // 4. 进入下一个词义或总结页
+  const handleNext = () => {
+    if (!wordData) return;
 
-    const currentMeaning = wordData.meanings[currentMeaningIndex];
-    
-    try {
-      setSubmitting(true);
-      
-      await learningApi.submitMeaning({
-        meaningId: currentMeaning.meaningId,
-        isCorrect: isCorrectAnswer
-      });
-
-      const newCompleted = new Set(completedMeanings);
-      newCompleted.add(currentMeaning.meaningId);
-      setCompletedMeanings(newCompleted);
-
-      if (currentMeaningIndex < wordData.meanings.length - 1) {
-        const newIndex = currentMeaningIndex + 1;
-        setCurrentMeaningIndex(newIndex);
-        setSelectedOption(null);
-        setShowFeedback(false);
-        
-        // 更新 sessionStorage
-        sessionStorage.setItem('currentLearningWord', JSON.stringify({
-          wordData: wordData,
-          currentMeaningIndex: newIndex,
-          completedMeanings: Array.from(newCompleted)
-        }));
-      } else {
-        // 所有词义学习完成，显示单词总结页
-        setShowWordSummary(true);
-        // 清除 sessionStorage（单词学习完成）
-        sessionStorage.removeItem('currentLearningWord');
-      }
-    } catch (err: any) {
-      setError(err.message || '提交失败');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // 完成单词学习，进入下一个单词
-  const handleCompleteWord = async () => {
-    if (!wordData || submitting) return;
-    
-    try {
-      setSubmitting(true);
-      await learningApi.completeWord({ wordId: wordData.wordId });
-      
-      // 重置状态，加载下一个单词
-      setShowWordSummary(false);
-      setCurrentMeaningIndex(0);
+    // 检查是否还有下一个词义
+    if (currentMeaningIndex < wordData.meanings.length - 1) {
+      // 进入下一个词义
+      setCurrentMeaningIndex(currentMeaningIndex + 1);
       setSelectedOption(null);
       setShowFeedback(false);
+    } else {
+      // 所有词义学完，进入总结页
+      setStatus('summary');
+    }
+  };
+
+  // 5. 在总结页完成单词，提交所有结果
+  const handleCompleteWordAndContinue = async () => {
+    if (submitting || !wordData) return;
+
+    setSubmitting(true);
+    try {
+      // V2 API: 一次性提交所有结果
+      await learningApi.submitProgress({ results: learningResults });
+      // 成功后加载下一个单词
       await loadNextWord();
     } catch (err: any) {
-      setError(err.message || '完成单词失败');
+      setError(err.message || '提交失败，请重试');
+      // 允许用户在失败时重试
     } finally {
       setSubmitting(false);
     }
   };
 
-  // 返回今日计划
-  const handleBackToPlan = () => {
-    navigate('/today-plan');
-  };
+  const handleBackToPlan = () => navigate('/today-plan');
 
-  // 加载中状态
-  if (loading) {
+  // ================= 渲染逻辑 =================
+
+  // 状态一：加载中
+  if (status === 'loading') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center">
@@ -233,24 +191,26 @@ export default function LearningSession() {
     );
   }
 
-  // 错误状态或提示信息
-  if (error) {
-    // 判断是哪种提示类型
-    const isCompleted = error.includes('学习完成') || error.includes('目标已完成');
-    const isReviewFirst = error.includes('请先完成复习') || error.includes('复习任务');
-    
+  // 状态二：各种提示信息（错误、复习优先、目标完成等）
+  if (['error', 'review_first', 'goal_met', 'book_completed'].includes(status)) {
+    const titles = {
+      error: '出错了',
+      review_first: '温馨提示',
+      goal_met: '太棒了！',
+      book_completed: '恭喜！'
+    };
+    const icons = {
+      error: '⚠️',
+      review_first: '📚',
+      goal_met: '🎉',
+      book_completed: '🏆'
+    };
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
-          <div className="text-6xl mb-4">
-            {isCompleted ? '🎉' : isReviewFirst ? '📚' : '⚠️'}
-          </div>
-          <h2 className="text-2xl font-bold mb-2">
-            {isCompleted ? '太棒了！' : isReviewFirst ? '温馨提示' : '提示'}
-          </h2>
-          <p className="text-gray-600 mb-6">
-            {error}
-          </p>
+          <div className="text-6xl mb-4">{icons[status as keyof typeof icons]}</div>
+          <h2 className="text-2xl font-bold mb-2">{titles[status as keyof typeof titles]}</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
           <button
             onClick={handleBackToPlan}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
@@ -261,74 +221,44 @@ export default function LearningSession() {
       </div>
     );
   }
-
-  if (!wordData) return null;
-
-  // 显示单词总结页
-  if (showWordSummary) {
+  
+  // 状态三：单词总结页
+  if (status === 'summary' && wordData) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
+      <div className="min-h-screen bg-gray-50 p-4 py-8">
         <div className="max-w-2xl mx-auto">
-          {/* 标题 */}
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{wordData.word}</h1>
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">{wordData.word}</h1>
             {wordData.pronunciation && (
               <p className="text-gray-600 text-lg">
                 UK: {wordData.pronunciation.uk} | US: {wordData.pronunciation.us}
               </p>
             )}
           </div>
-
-          {/* 所有词义列表 */}
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">单词总结</h2>
-            <div className="space-y-6">
-              {wordData.meanings.map((meaning, index) => (
-                <div key={meaning.meaningId} className="border-l-4 border-blue-500 pl-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">
-                    词义 {index + 1}：{meaning.definition}
-                  </h3>
-                  
-                  {/* 该词义的所有例句 */}
-                  <div className="space-y-2">
-                    {meaning.examples.map((example, exIdx) => (
-                      <div key={exIdx} className="bg-gray-50 p-3 rounded-lg">
-                        <p className="text-sm text-gray-700 leading-relaxed">
-                          {example.sentence.split(new RegExp(`(${wordData.word})`, 'gi')).map((part: string, i: number) =>
-                            part.toLowerCase() === wordData.word.toLowerCase() ? (
-                              <span key={i} className="bg-yellow-200 text-blue-600 font-semibold">
-                                {part}
-                              </span>
-                            ) : (
-                              part
-                            )
-                          )}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* 相关信息 */}
-                  {meaning.relatedInfo && typeof meaning.relatedInfo === 'object' && (
-                    <div className="mt-3 text-sm text-gray-600">
-                      {meaning.relatedInfo.synonyms && meaning.relatedInfo.synonyms.length > 0 && (
-                        <p>
-                          <span className="font-medium">近义词：</span>
-                          {meaning.relatedInfo.synonyms.join('、')}
-                        </p>
-                      )}
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-4">学习成果</h2>
+            <ul className="space-y-4">
+              {wordData.meanings.map((meaning) => {
+                const result = learningResults.find(r => r.meaningId === meaning.meaningId);
+                const isCorrect = result ? result.isCorrect : false;
+                return (
+                  <li key={meaning.meaningId} className={`p-4 rounded-lg flex items-center ${isCorrect ? 'bg-green-50' : 'bg-red-50'}`}>
+                    <span className={`mr-4 text-2xl ${isCorrect ? 'text-green-500' : 'text-red-500'}`}>
+                      {isCorrect ? '✓' : '✗'}
+                    </span>
+                    <div>
+                      <p className="font-semibold text-gray-800">{meaning.partOfSpeech}. {meaning.definition}</p>
+                      <p className="text-sm text-gray-600 mt-1">你的选择: {isCorrect ? '正确' : '错误'}</p>
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-
-          {/* 完成按钮 */}
           <button
-            onClick={handleCompleteWord}
+            onClick={handleCompleteWordAndContinue}
             disabled={submitting}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-4 px-6 rounded-lg transition-colors"
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-lg transition-colors text-lg"
           >
             {submitting ? '提交中...' : '完成单词，继续学习'}
           </button>
@@ -337,237 +267,122 @@ export default function LearningSession() {
     );
   }
 
-  const currentMeaning = wordData.meanings[currentMeaningIndex];
-  const progress = `${currentMeaningIndex + 1}/${wordData.totalMeanings}`;
-  const firstExample = currentMeaning.examples && currentMeaning.examples.length > 0 
-    ? currentMeaning.examples[0] 
-    : null;
+  // 状态四：核心学习界面
+  if (status === 'learning' && wordData) {
+    const currentMeaning = wordData.meanings[currentMeaningIndex];
+    const exampleSentence = currentMeaning.examples[0]?.sentence || '（暂无例句）';
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-2xl mx-auto">
-        {/* 顶部导航栏 */}
-        <div className="flex items-center justify-between mb-6">
-          <button
-            onClick={handleBackToPlan}
-            className="flex items-center text-gray-600 hover:text-gray-900"
-          >
-            <span className="mr-2">←</span>
-            返回
-          </button>
-          <div className="text-sm text-gray-500">
-            词义 {progress}
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-2xl mx-auto">
+          {/* 顶部导航栏 */}
+          <div className="flex items-center justify-start mb-6">
+            <button
+              onClick={() => navigate('/today-plan')}
+              className="flex items-center text-gray-600 hover:text-gray-900"
+            >
+              <span className="mr-2">←</span>
+              返回
+            </button>
           </div>
-        </div>
-
-        {/* 单词卡片 */}
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-          {/* 单词标题 */}
-          <div className="text-center mb-6">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              {wordData.word}
-            </h1>
-            {(wordData.pronunciation.uk || wordData.pronunciation.us) && (
-              <div className="text-gray-500 space-x-4">
-                {wordData.pronunciation.uk && (
-                  <span>🇬🇧 {wordData.pronunciation.uk}</span>
-                )}
-                {wordData.pronunciation.us && (
-                  <span>🇺🇸 {wordData.pronunciation.us}</span>
-                )}
-              </div>
+          <div className="max-w-2xl w-full bg-white rounded-lg shadow-lg p-8">
+          {/* 单词和音标 */}
+          <div className="text-center mb-8">
+            <h1 className="text-5xl font-bold text-gray-900">{wordData.word}</h1>
+            {wordData.pronunciation && (
+              <p className="text-gray-500 mt-2 text-lg">
+                UK: {wordData.pronunciation.uk} | US: {wordData.pronunciation.us}
+              </p>
             )}
           </div>
 
-          {/* 词性标签 */}
-          <div className="flex justify-center mb-6">
-            <span className="inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
-              {currentMeaning.partOfSpeech}
-            </span>
+          {/* 进度条 */}
+          <div className="mb-6">
+            <div className="flex justify-between mb-1">
+              <span className="text-sm font-medium text-blue-700">
+                词义 {currentMeaningIndex + 1}/{wordData.meanings.length}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div
+                className="bg-blue-600 h-2.5 rounded-full"
+                style={{ width: `${((currentMeaningIndex + 1) / wordData.meanings.length) * 100}%` }}
+              ></div>
+            </div>
           </div>
 
-          {/* 情境引入：例句 */}
-          {firstExample && (() => {
-            const { parts, actualWords } = splitSentenceWithHighlight(firstExample.sentence, firstExample.highlightWord);
-            let wordIndex = 0;
-            
-            return (
-              <div className="mb-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <h3 className="text-sm font-semibold text-blue-900 mb-2">📖 请根据例句选择含义</h3>
-                <p className="text-lg text-gray-800 leading-relaxed">
-                  {parts.map((part, idx) => {
-                    if (idx % 2 === 0) {
-                      return <span key={idx}>{part}</span>;
-                    } else {
-                      const actualWord = actualWords[wordIndex++];
-                      return (
-                        <span key={idx}>
-                          <span className="font-bold text-blue-600 bg-yellow-100 px-1">
-                            {actualWord}
-                          </span>
-                        </span>
-                      );
-                    }
-                  })}
-                </p>
-                {firstExample.source && (
-                  <p className="text-xs text-blue-600 mt-2">— {firstExample.source}</p>
-                )}
-              </div>
-            );
-          })()}
+          {/* 句子和问题 */}
+          <div className="bg-gray-100 p-6 rounded-lg mb-8 text-center">
+            <p className="text-xl text-gray-800 mb-4 leading-relaxed">
+              <HighlightedSentence sentence={exampleSentence} highlight={wordData.word} />
+            </p>
+            <p className="font-semibold text-gray-700">请选择“{wordData.word}”在该句中的含义：</p>
+          </div>
 
-          {!showFeedback ? (
-            <>
-              {/* 选择题选项 */}
-              <div className="space-y-3 mb-6">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                  请选择 "{wordData.word}" 在该句中的含义：
-                </h3>
-                {quizOptions.map((option: string, index: number) => (
-                  <button
-                    key={index}
-                    onClick={() => handleSelectOption(index)}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                      selectedOption === index
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-medium text-gray-700 mr-2">
-                      {String.fromCharCode(65 + index)}.
-                    </span>
-                    <span className="text-gray-900">{option}</span>
-                  </button>
-                ))}
-              </div>
+          {/* 选项 */}
+          <div className="space-y-4 mb-8">
+            {quizOptions.map((option, index) => {
+              let buttonClass = 'w-full text-left p-4 rounded-lg border transition-all duration-200 ';
+              if (showFeedback) {
+                if (index === quizCorrectIndex) {
+                  buttonClass += 'bg-green-100 border-green-500 text-green-800 font-semibold';
+                } else if (index === selectedOption) {
+                  buttonClass += 'bg-red-100 border-red-500 text-red-800';
+                } else {
+                  buttonClass += 'bg-white border-gray-300 text-gray-700 cursor-not-allowed';
+                }
+              } else {
+                if (index === selectedOption) {
+                  buttonClass += 'bg-blue-100 border-blue-500 ring-2 ring-blue-300';
+                } else {
+                  buttonClass += 'bg-white border-gray-300 hover:bg-gray-50';
+                }
+              }
+              return (
+                <button key={index} onClick={() => handleSelectOption(index)} disabled={showFeedback} className={buttonClass}>
+                  <span className="font-mono mr-3">{String.fromCharCode(65 + index)}.</span>
+                  {option}
+                </button>
+              );
+            })}
+          </div>
 
-              {/* 确认按钮 */}
+          {/* 操作按钮 */}
+          <div className="mt-6">
+            {!showFeedback ? (
               <button
                 onClick={handleConfirmSelection}
                 disabled={selectedOption === null}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-4 px-6 rounded-lg transition-colors"
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-3 px-6 rounded-lg transition-colors"
               >
                 确认选择
               </button>
-            </>
-          ) : (
-            <>
-              {/* 反馈区域 */}
-              <div className={`mb-6 p-6 rounded-lg ${
-                isCorrectAnswer ? 'bg-green-50 border-2 border-green-200' : 'bg-red-50 border-2 border-red-200'
-              }`}>
-                <div className="flex items-center mb-4">
-                  <span className="text-4xl mr-3">
-                    {isCorrectAnswer ? '✅' : '❌'}
-                  </span>
-                  <div>
-                    <h3 className={`text-xl font-bold ${
-                      isCorrectAnswer ? 'text-green-900' : 'text-red-900'
-                    }`}>
-                      {isCorrectAnswer ? '回答正确！' : '回答错误'}
-                    </h3>
-                    {!isCorrectAnswer && (
-                      <p className="text-red-700 text-sm">
-                        正确答案：{String.fromCharCode(65 + quizCorrectIndex)}. {quizOptions[quizCorrectIndex]}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* 详细释义 */}
-              <div className="space-y-6 mb-6">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-500 mb-2">📝 详细释义</h3>
-                  <p className="text-lg text-gray-900">{currentMeaning.definition}</p>
-                  {currentMeaning.relatedInfo && typeof currentMeaning.relatedInfo === 'object' && currentMeaning.relatedInfo.synonyms && (
-                    <p className="text-sm text-gray-500 mt-2">
-                      <span className="font-medium">同义词：</span>
-                      {Array.isArray(currentMeaning.relatedInfo.synonyms) 
-                        ? currentMeaning.relatedInfo.synonyms.join(', ')
-                        : JSON.stringify(currentMeaning.relatedInfo.synonyms)}
-                    </p>
-                  )}
-                </div>
-
-                {/* 更多例句 */}
-                {currentMeaning.examples.length > 1 && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-500 mb-2">📚 更多例句</h3>
-                    <div className="space-y-3">
-                      {currentMeaning.examples.slice(1).map((example) => {
-                        const { parts, actualWords } = splitSentenceWithHighlight(example.sentence, example.highlightWord);
-                        let wordIndex = 0;
-                        
-                        return (
-                          <div key={example.id} className="bg-gray-50 p-3 rounded-lg">
-                            <p className="text-gray-800">
-                              {parts.map((part, idx) => {
-                                if (idx % 2 === 0) {
-                                  return <span key={idx}>{part}</span>;
-                                } else {
-                                  const actualWord = actualWords[wordIndex++];
-                                  return (
-                                    <span key={idx}>
-                                      <span className="font-bold text-blue-600">
-                                        {actualWord}
-                                      </span>
-                                    </span>
-                                  );
-                                }
-                              })}
-                            </p>
-                            {example.source && (
-                              <p className="text-xs text-gray-400 mt-1">— {example.source}</p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 继续按钮 */}
+            ) : (
               <button
                 onClick={handleNext}
-                disabled={submitting}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium py-4 px-6 rounded-lg transition-colors"
+                className={`w-full text-white font-medium py-3 px-6 rounded-lg transition-colors ${isCorrectAnswer ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-500 hover:bg-yellow-600'}`}
               >
-                {submitting ? '提交中...' : (
-                  currentMeaningIndex < wordData.totalMeanings - 1 ? '下一个词义' : '完成单词'
-                )}
+                {currentMeaningIndex < wordData.meanings.length - 1 ? '下一个词义' : '查看单词总结'}
               </button>
-            </>
-          )}
-        </div>
-
-        {/* 进度指示器 */}
-        <div className="text-center">
-          <div className="flex justify-center space-x-2 mb-2">
-            {Array.from({ length: wordData.totalMeanings }).map((_, idx) => (
-              <div
-                key={idx}
-                className={`w-3 h-3 rounded-full ${
-                  completedMeanings.has(wordData.meanings[idx]?.meaningId)
-                    ? 'bg-green-500'
-                    : idx === currentMeaningIndex
-                    ? 'bg-blue-500'
-                    : 'bg-gray-300'
-                }`}
-              />
-            ))}
+            )}
           </div>
-          <p className="text-sm text-gray-500">
-            已完成 {completedMeanings.size}/{wordData.totalMeanings} 个词义
-          </p>
         </div>
+        </div>
+      </div>
+    );
+  }
 
-        {/* 词书信息 */}
-        <div className="mt-6 text-center text-sm text-gray-400">
-          📚 {wordData.bookTag}
-        </div>
+  // 状态五：回退或空状态
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="text-center">
+        <p className="text-gray-600">未知状态，请返回重试。</p>
+        <button
+          onClick={handleBackToPlan}
+          className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg"
+        >
+          返回学习计划
+        </button>
       </div>
     </div>
   );

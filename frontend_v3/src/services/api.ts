@@ -14,10 +14,8 @@ import type {
   UpdateCurrentBookRequest,
   TodayPlanResponse,
   NextWordResponse,
-  SubmitMeaningRequest,
-  SubmitMeaningResponse,
-  CompleteWordRequest,
-  CompleteWordResponse,
+  SubmitProgressRequest,
+  SubmitProgressResponse,
   TodayReviewResponse,
   ReviewSubmitRequest,
   ReviewSubmitResponse,
@@ -106,34 +104,28 @@ export const learningApi = {
   },
 
   /**
-   * 获取下一个要学习的单词（包含所有词义）
+   * 获取下一个要学习的单词或状态 (V2)
    * GET /api/learning/word/next
    */
   async getNextWord(): Promise<NextWordResponse> {
-    const response = await apiClient.get<ApiResponse<NextWordResponse>>('/learning/word/next');
-    if (!response.data.data) {
-      // 后端返回 null 表示学习完成
-      throw new Error(response.data.message || '今日学习已完成');
+    const response = await apiClient.get<ApiResponse<any>>('/learning/word/next');
+    // 如果后端返回了 code 字段（在 response.data 层级），说明是特殊状态
+    if ('code' in response.data && response.data.data === null) {
+      return {
+        code: response.data.code as 'REVIEW_FIRST' | 'GOAL_MET' | 'BOOK_COMPLETED',
+        message: response.data.message
+      };
     }
+    // 否则返回正常的单词数据
     return response.data.data;
   },
 
   /**
-   * 提交单个词义的学习结果
-   * POST /api/learning/meaning/submit
-   * 注意：isCorrect 是布尔值（true = 认识，false = 不认识）
+   * 提交一个单词的学习进度 (V2)
+   * POST /api/learning/progress
    */
-  async submitMeaning(data: SubmitMeaningRequest): Promise<SubmitMeaningResponse> {
-    const response = await apiClient.post<ApiResponse<SubmitMeaningResponse>>('/learning/meaning/submit', data);
-    return response.data.data;
-  },
-
-  /**
-   * 标记单词学习完成（所有词义学完后调用）
-   * POST /api/learning/word/complete
-   */
-  async completeWord(data: CompleteWordRequest): Promise<CompleteWordResponse> {
-    const response = await apiClient.post<ApiResponse<CompleteWordResponse>>('/learning/word/complete', data);
+  async submitProgress(data: SubmitProgressRequest): Promise<SubmitProgressResponse> {
+    const response = await apiClient.post<ApiResponse<SubmitProgressResponse>>('/learning/progress', data);
     return response.data.data;
   }
 };

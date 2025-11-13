@@ -1,8 +1,8 @@
 // Prisma Schema for 语境记忆背单词软件
 // 数据库：MySQL 8.0
-// 版本：v1.3
-// 日期：2025年10月28日
-// 更新：添加用户学习目标设置，重构打卡系统
+// 版本：v2.0
+// 日期：2025年11月6日
+// 更新：根据 V2 设计文档，重构单词、词义、学习进度模型，引入 lemma 和 SM-2 算法支持。
 
 generator client {
   provider = "prisma-client-js"
@@ -38,90 +38,83 @@ model User {
 }
 
 // ============================================
-// 单词数据表
+// 单词数据表 (V2 Structure)
 // ============================================
 
-/// 单词基础表 - 存储单词原文和音标
+/// 单词基础表 - 存储单词原文、原型和音标
 model Word {
-  id             Int      @id @default(autoincrement())
-  word           String   @unique @db.VarChar(255)
-  pronunciation  String   @db.Text // JSON格式: {"uk": "/ˈwɜːrd/", "us": "/ˈwɝːd/"}
+  id            Int      @id @default(autoincrement())
+  word          String   @unique @db.VarChar(255)
+  pronunciation Json?     @db.Json // JSON格式: {"uk": "/ˈwɜːd/", "us": "/ˈwɝːd/"}
+  lemma         String?  @db.VarChar(255) // 单词原型，如 'went' 的 lemma 是 'go'
+  lemmaId       Int?     @map("lemma_id") // 指向原型单词的ID
 
   // 关联关系
-  partsOfSpeech  PartOfSpeech[]
-  bookTags       WordTagRelation[]
-  wordNotebook   UserWordNotebook[]
+  meanings      Meaning[]
+  bookTags      WordTagRelation[]
+  wordNotebook  UserWordNotebook[]
+  
+  // 自引用，用于原型和派生词
+  prototype     Word?    @relation("WordLemmas", fields: [lemmaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  variants      Word[]   @relation("WordLemmas")
 
   @@index([word])
+  @@index([lemma])
+  @@index([lemmaId])
   @@map("words")
 }
 
-/// 词性表 - 一个单词可以有多个词性
-model PartOfSpeech {
-  id            Int       @id @default(autoincrement())
-  wordId        Int       @map("word_id")
-  partOfSpeech  String    @map("part_of_speech") @db.VarChar(50)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
-
-  // 关联关系
-  word          Word      @relation(fields: [wordId], references: [id], onDelete: Cascade)
-  meanings      Meaning[]
-
-  @@index([wordId])
-  @@index([partOfSpeech])
-  @@map("parts_of_speech")
-}
-
-/// 词义表 - 存储详细释义
+/// 词义表 - 存储详细释义 (V2 Structure, PartOfSpeech merged)
 model Meaning {
   id              Int       @id @default(autoincrement())
-  partOfSpeechId  Int       @map("part_of_speech_id")
+  wordId          Int       @map("word_id")
+  partOfSpeech    String    @map("part_of_speech") @db.VarChar(50)
   definition      String    @db.Text
-  relatedInfo     String?   @map("related_info") @db.Text // JSON格式，存储词典例句、同反义词等
+  extra           Json?     // JSON格式，存储英文定义、标签、音标、助记等
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
 
   // 关联关系
-  partOfSpeech    PartOfSpeech              @relation(fields: [partOfSpeechId], references: [id], onDelete: Cascade)
+  word            Word                      @relation(fields: [wordId], references: [id], onDelete: Cascade)
   examples        MeaningExampleRelation[]
   learningProgress UserLearningProgress[]
 
-  @@index([partOfSpeechId])
+  @@index([wordId])
   @@map("meanings")
 }
 
 // ============================================
-// 例句相关表
+// 例句相关表 (V2 Structure)
 // ============================================
 
 /// 例句中央池 - 存储所有例句，支持复用
 model ExamplePool {
-  id          Int       @id @default(autoincrement())
-  sentence    String    @db.Text
-  source      String    @db.VarChar(50) // '真题' 或 'AI生成'
-  difficulty  String    @db.VarChar(50) // 如：小学、四级、考研
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
+  id           Int       @id @default(autoincrement())
+  sentence     String    @db.Text
+  sourceType   String    @map("source_type") @db.VarChar(50) // 'ecdict', 'true_exam', 'ai_generated', 'user_added'
+  sourceDetail String?   @map("source_detail") @db.VarChar(255) // 'CET-4 2023.12 Set 1'
+  embedding    Bytes?    // 句向量
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
 
   // 关联关系
-  meanings    MeaningExampleRelation[]
+  meanings     MeaningExampleRelation[]
 
-  @@index([source])
-  @@index([difficulty])
+  @@index([sourceType])
   @@map("example_pool")
 }
 
 /// 词义-例句关联表 - 建立多对多关系
 model MeaningExampleRelation {
-  meaningId      Int    @map("meaning_id")
-  exampleId      Int    @map("example_id")
-  highlightWord  String @map("highlight_word") @db.VarChar(255)
-  orderInMeaning Int?   @map("order_in_meaning")
+  meaningId      Int     @map("meaning_id")
+  exampleId      Int     @map("example_id")
+  highlightWord  String? @map("highlight_word") @db.VarChar(255)
+  orderInMeaning Int?    @map("order_in_meaning")
+  isPrimary      Boolean @default(false) @map("is_primary") // 是否为该词义的主推例句
 
   // 关联关系
-  meaning        Meaning      @relation(fields: [meaningId], references: [id], onDelete: Cascade)
-  example        ExamplePool  @relation(fields: [exampleId], references: [id], onDelete: Cascade)
+  meaning        Meaning     @relation(fields: [meaningId], references: [id], onDelete: Cascade)
+  example        ExamplePool @relation(fields: [exampleId], references: [id], onDelete: Cascade)
 
   @@id([meaningId, exampleId])
   @@index([meaningId])
@@ -165,19 +158,25 @@ model WordTagRelation {
 }
 
 // ============================================
-// 用户学习相关表
+// 用户学习相关表 (V2 Structure)
 // ============================================
 
-/// 用户学习进度表 - 记录对每个词义的学习进度（艾宾浩斯曲线核心表）
+/// 用户学习进度表 - 记录对每个词义的学习进度（SM-2 算法核心表）
 model UserLearningProgress {
   id                 Int       @id @default(autoincrement())
   userId             Int       @map("user_id")
   meaningId          Int       @map("meaning_id")
   masteryLevel       Int       @default(0) @map("mastery_level") // 0-5
+  
+  // SM-2 算法核心字段
+  easinessFactor     Float     @default(2.5) @map("easiness_factor") // E-Factor
+  interval           Int       @default(0)   // 复习间隔天数
+  repetitions        Int       @default(0)   // 复习次数
+  
   lastReviewAt       DateTime? @map("last_review_at") @db.Timestamp(0)
   nextReviewAt       DateTime  @map("next_review_at") @db.Timestamp(0)
-  reviewCount        Int       @default(0) @map("review_count")
-  consecutiveCorrect Int       @default(0) @map("consecutive_correct")
+  reviewCount        Int       @default(0) @map("review_count") // 总复习次数（兼容旧版）
+  consecutiveCorrect Int       @default(0) @map("consecutive_correct") // 连续正确次数（兼容旧版）
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
 
