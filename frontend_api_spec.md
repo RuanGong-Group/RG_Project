@@ -38,11 +38,6 @@ POST /api/auth/login
 
 2. 用户接口
 
-GET /api/user/profile
-- Auth: Bearer
-- 成功示例：
-  { success: true, data: { userId: 1, username: "alice" } }
-
 GET /api/user/current-book
 - Auth: Bearer
 - 成功示例：
@@ -50,7 +45,7 @@ GET /api/user/current-book
 
 PUT /api/user/current-book
 - Auth: Bearer
-- Body: { bookTagId: number }
+- Body: { bookId: number }
 - 成功示例：{ success: true, message: "切换成功" }
 
 GET /api/user/settings/daily-goal
@@ -80,8 +75,8 @@ GET /api/learning/next
 POST /api/learning/progress
 - 说明：更新学习进度（通用）
 - Auth: Bearer
-- Body: { meaningId: number, isCorrect: boolean }
-- 成功示例：{ success: true, message: "已记录" }
+- Body: { results: [{ meaningId: number, isCorrect: boolean }] }
+- 成功示例：{ success: true, message: "学习进度更新成功", data: [{ meaningId: 501, masteryLevel: 1, nextReviewAt: "2025-11-13T..." }] }
 
 GET /api/learning/review/today
 - Auth: Bearer
@@ -92,19 +87,35 @@ POST /api/learning/review/submit
 - Body: { reviewId: number, meaningId: number, isCorrect: boolean, details?: { typed?: string } }
 - 成功示例：{ success: true }
 
-// 新的完整单词学习流程接口
+// 新的完整单词学习流程接口（V2 架构）
 GET /api/learning/word/next
 - Auth: Bearer
 - 返回示例：
   {
     "success": true,
     "data": {
-      "word": { "id": 101, "word": "abandon", "pronunciation": { "uk":"/əˈbændən/","us":"/əˈbændən/" } },
-      "partsOfSpeech": [
-        { "id": 21, "partOfSpeech": "v.", "meanings": [
-          { "id": 501, "definition": "放弃; 抛弃", "examples": [ { "id": 9001, "sentence":"Many people had to abandon their homes.", "source":"真题" } ] }
-        ] }
-      ]
+      "wordId": 101,
+      "word": "abandon",
+      "pronunciation": { "uk": "/əˈbændən/", "us": "/əˈbændən/" },
+      "lemma": "abandon",
+      "meanings": [
+        {
+          "meaningId": 501,
+          "partOfSpeech": "v.",
+          "definition": "放弃；抛弃",
+          "extra": null,
+          "examples": [
+            {
+              "id": 9001,
+              "sentence": "Many people had to abandon their homes.",
+              "sourceType": "真题",
+              "sourceDetail": "CET-4 2023-06"
+            }
+          ]
+        }
+      ],
+      "masteryFocus": "recognition",
+      "bookTag": "CET-4"
     }
   }
 
@@ -184,8 +195,21 @@ Mock 示例（供本地运行）
   {
     "success": true,
     "data": {
-      "word": { "id": 101, "word": "abandon", "pronunciation": { "uk":"/əˈbændən/","us":"/əˈbændən/" } },
-      "partsOfSpeech": [ { "id": 21, "partOfSpeech": "v.", "meanings": [ { "id": 501, "definition": "放弃; 抛弃", "examples": [ { "id": 9001, "sentence":"Many people had to abandon their homes.", "source":"真题" } ] } ] } ]
+      "wordId": 101,
+      "word": "abandon",
+      "pronunciation": { "uk": "/əˈbændən/", "us": "/əˈbændən/" },
+      "lemma": "abandon",
+      "meanings": [
+        {
+          "meaningId": 501,
+          "partOfSpeech": "v.",
+          "definition": "放弃；抛弃",
+          "extra": null,
+          "examples": [{ "id": 9001, "sentence": "Many people had to abandon their homes.", "sourceType": "ecdict", "sourceDetail": null }]
+        }
+      ],
+      "masteryFocus": "recognition",
+      "bookTag": "CET-4"
     }
   }
 

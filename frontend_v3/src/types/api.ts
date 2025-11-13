@@ -80,8 +80,8 @@ export interface WordToLearn {
   wordId: number;
   word: string;
   pronunciation: Pronunciation;
+  lemma?: string | null;
   meanings: Meaning[];
-  totalMeanings: number;
   masteryFocus: 'recognition' | 'production';
   bookTag: string;
 }
@@ -102,6 +102,8 @@ export interface LearningProgressUpdate {
   meaningId: number;
   isCorrect: boolean;
 }
+
+// ⚠️ 注意：POST /api/learning/progress 的实际请求体是 results 数组
 
 export interface LearningProgressResponse {
   masteryLevel: number;
@@ -380,15 +382,10 @@ export interface SubmitProgressRequest {
  * POST /api/learning/progress 的响应类型。
  */
 export interface SubmitProgressResponse {
-  wordId: number;
-  totalMeanings: number;
-  correctMeanings: number;
-  progressUpdates: {
-    meaningId: number;
-    masteryLevel: number;
-    nextReviewAt: string;
-  }[];
-}
+  meaningId: number;
+  masteryLevel: number;
+  nextReviewAt: string;
+}[]
 
 // ============================================
 // 统计相关类型
