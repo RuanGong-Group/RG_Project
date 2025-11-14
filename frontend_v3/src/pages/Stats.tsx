@@ -25,7 +25,7 @@ export default function Stats() {
       setOverview(overviewData);
     } catch (err: any) {
       console.error('加载统计数据失败:', err);
-      setError(err.response?.data?.message || '加载统计数据失败');
+      setError(err.response?.data?.message || err.message || '加载统计数据失败');
     } finally {
       setLoading(false);
     }

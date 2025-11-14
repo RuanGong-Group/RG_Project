@@ -6,16 +6,26 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { bookApi, learningApi } from '../services/api';
+import { useAuthStore } from '../stores/authStore';
 import type { Book, TodayPlanResponse } from '../types/api';
 
 export default function TodayPlan() {
   const navigate = useNavigate();
+  const { logout } = useAuthStore();
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [allBooks, setAllBooks] = useState<Book[]>([]);
   const [plan, setPlan] = useState<TodayPlanResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showBookSelector, setShowBookSelector] = useState(false);
+
+  // 退出登录
+  const handleLogout = () => {
+    if (confirm('确定要退出登录吗？')) {
+      logout();
+      navigate('/login');
+    }
+  };
 
   // 加载数据
   useEffect(() => {
@@ -209,16 +219,17 @@ export default function TodayPlan() {
             今日学习计划
           </h1>
           <button
-            onClick={() => navigate('/')}
+            onClick={handleLogout}
             style={{
               padding: '8px 16px',
-              backgroundColor: 'white',
-              border: '1px solid #d9d9d9',
+              backgroundColor: '#ff4d4f',
+              color: 'white',
+              border: 'none',
               borderRadius: '4px',
               cursor: 'pointer'
             }}
           >
-            返回首页
+            退出登录
           </button>
         </div>
 

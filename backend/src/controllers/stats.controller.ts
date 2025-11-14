@@ -76,14 +76,13 @@ export const getOverview = async (req: AuthRequest, res: Response): Promise<void
     // 4. 获取这些单词的所有词义ID
     const meaningsInBook = await prisma.meaning.findMany({
       where: {
-        partOfSpeech: {
-          wordId: {
-            in: wordIds
-          }
+        wordId: {
+          in: wordIds
         }
       },
       select: {
-        id: true
+        id: true,
+        wordId: true
       }
     });
 
@@ -111,22 +110,20 @@ export const getOverview = async (req: AuthRequest, res: Response): Promise<void
           in: meaningIds
         }
       },
-      include: {
-        meaning: {
-          include: {
-            partOfSpeech: {
-              select: {
-                wordId: true
-              }
-            }
-          }
-        }
+      select: {
+        masteryLevel: true,
+        meaningId: true
       }
     });
 
+    // 创建 meaningId 到 wordId 的映射
+    const meaningToWordMap = new Map(
+      meaningsInBook.map(m => [m.id, m.wordId])
+    );
+
     // 统计唯一的单词ID
     const learnedWordIds = new Set(
-      learnedProgress.map(p => p.meaning.partOfSpeech.wordId)
+      learnedProgress.map(p => meaningToWordMap.get(p.meaningId)).filter(Boolean)
     );
     const totalLearnedWords = learnedWordIds.size;
 
@@ -143,7 +140,8 @@ export const getOverview = async (req: AuthRequest, res: Response): Promise<void
     // 遍历所有学习进度，统计每个单词的最高掌握度
     const wordMasteryMap = new Map<number, number>();
     for (const progress of learnedProgress) {
-      const wordId = progress.meaning.partOfSpeech.wordId;
+      const wordId = meaningToWordMap.get(progress.meaningId);
+      if (!wordId) continue;
       const currentMastery = wordMasteryMap.get(wordId) || 0;
       wordMasteryMap.set(wordId, Math.max(currentMastery, progress.masteryLevel));
     }

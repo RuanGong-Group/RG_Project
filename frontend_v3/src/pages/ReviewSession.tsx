@@ -3,10 +3,12 @@
  * 测试点4：根据艾宾浩斯记忆曲线复习词义
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { reviewApi } from '../services/api';
 import type { ReviewItem } from '../types/api';
+
+type SessionStatus = 'loading' | 'error' | 'reviewing' | 'completed';
 
 /**
  * 辅助函数：不区分大小写地高亮句子中的单词
@@ -54,25 +56,27 @@ function splitSentenceWithHighlight(sentence: string, highlightWord: string): {
 export default function ReviewSession() {
   const navigate = useNavigate();
 
-  // 复习数据状态
+  // 页面状态
+  const [status, setStatus] = useState<SessionStatus>('loading');
+  const [error, setError] = useState<string | null>(null);
+
+  // 复习数据
   const [reviewList, setReviewList] = useState<ReviewItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [totalReviews, setTotalReviews] = useState(0);
   const [bookTag, setBookTag] = useState('');
   
   // 交互状态
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [isCorrectAnswer, setIsCorrectAnswer] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   
-  // 当前词义的选项（固定，不会重新生成）
+  // 当前词义的选项
   const [quizOptions, setQuizOptions] = useState<string[]>([]);
   const [quizCorrectIndex, setQuizCorrectIndex] = useState<number>(0);
   
-  // 拼写输入状态（用于 production 模式）
+  // 拼写输入状态
   const [spellingInput, setSpellingInput] = useState('');
   
   // 复习统计
@@ -91,14 +95,15 @@ export default function ReviewSession() {
   };
 
   // 加载今日复习任务
-  const loadReviewList = async () => {
+  const loadReviewList = useCallback(async () => {
+    setStatus('loading');
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
       const data = await reviewApi.getTodayReview();
       
       if (data.totalReviews === 0 || data.reviews.length === 0) {
-        setError('暂无复习任务');
+        setStatus('completed');
+        setError('暂无复习任务'); // 使用 error 状态传递完成信息
         return;
       }
       
@@ -106,55 +111,34 @@ export default function ReviewSession() {
       setTotalReviews(data.totalReviews);
       setBookTag(data.bookTag);
       setCurrentIndex(0);
+      setCompletedCount(0);
+      setCorrectCount(0);
+      setStatus('reviewing');
       
-      // 保存到 sessionStorage（用于页面刷新恢复）
-      sessionStorage.setItem('currentReviewSession', JSON.stringify({
-        reviewList: data.reviews,
-        currentIndex: 0,
-        totalReviews: data.totalReviews,
-        bookTag: data.bookTag,
-        completedCount: 0,
-        correctCount: 0
-      }));
+      // 清除旧的 session
+      sessionStorage.removeItem('currentReviewSession');
+
     } catch (err: any) {
       setError(err.message || '加载复习任务失败');
-    } finally {
-      setLoading(false);
+      setStatus('error');
     }
-  };
+  }, []);
 
   useEffect(() => {
-    // 尝试从 sessionStorage 恢复状态
-    const saved = sessionStorage.getItem('currentReviewSession');
-    if (saved) {
-      try {
-        const { reviewList: savedList, currentIndex: savedIndex, totalReviews: savedTotal, bookTag: savedTag, completedCount: savedCompleted, correctCount: savedCorrect } = JSON.parse(saved);
-        setReviewList(savedList);
-        setCurrentIndex(savedIndex);
-        setTotalReviews(savedTotal);
-        setBookTag(savedTag);
-        setCompletedCount(savedCompleted);
-        setCorrectCount(savedCorrect);
-        setLoading(false);
-        return;
-      } catch (err) {
-        console.error('恢复复习状态失败:', err);
-        sessionStorage.removeItem('currentReviewSession');
-      }
-    }
-    
-    // 没有保存的状态，加载新任务
     loadReviewList();
-  }, []);
+  }, [loadReviewList]);
 
   // 当词义变化时生成选项
   useEffect(() => {
-    if (reviewList.length === 0 || currentIndex >= reviewList.length) return;
+    if (status !== 'reviewing' || reviewList.length === 0 || currentIndex >= reviewList.length) return;
+    
     const currentReview = reviewList[currentIndex];
-    const { options, correctIndex } = generateOptions(currentReview.definition);
-    setQuizOptions(options);
-    setQuizCorrectIndex(correctIndex);
-  }, [reviewList, currentIndex]);
+    if (currentReview.reviewMode === 'recognition') {
+      const { options, correctIndex } = generateOptions(currentReview.definition);
+      setQuizOptions(options);
+      setQuizCorrectIndex(correctIndex);
+    }
+  }, [reviewList, currentIndex, status]);
 
   // 选择选项
   const handleSelectOption = (index: number) => {
@@ -187,42 +171,34 @@ export default function ReviewSession() {
 
     const currentReview = reviewList[currentIndex];
     
+    // 立即提交本次复习结果
+    setSubmitting(true);
     try {
-      setSubmitting(true);
-      
       await reviewApi.submitReview({
         meaningId: currentReview.meaningId,
         isCorrect: isCorrectAnswer
       });
 
+      // 更新统计
       const newCompletedCount = completedCount + 1;
       const newCorrectCount = isCorrectAnswer ? correctCount + 1 : correctCount;
       setCompletedCount(newCompletedCount);
       setCorrectCount(newCorrectCount);
 
+      // 检查是否还有下一个
       if (currentIndex < reviewList.length - 1) {
         const newIndex = currentIndex + 1;
         setCurrentIndex(newIndex);
         setSelectedOption(null);
-        setSpellingInput(''); // 清空拼写输入
+        setSpellingInput('');
         setShowFeedback(false);
-        
-        // 更新 sessionStorage
-        sessionStorage.setItem('currentReviewSession', JSON.stringify({
-          reviewList,
-          currentIndex: newIndex,
-          totalReviews,
-          bookTag,
-          completedCount: newCompletedCount,
-          correctCount: newCorrectCount
-        }));
       } else {
-        // 所有复习完成，清除缓存
-        sessionStorage.removeItem('currentReviewSession');
-        setError('复习完成');
+        // 所有复习完成
+        setStatus('completed');
       }
     } catch (err: any) {
-      setError(err.message || '提交失败');
+      setError(err.message || '提交复习结果失败');
+      setStatus('error');
     } finally {
       setSubmitting(false);
     }
@@ -234,7 +210,7 @@ export default function ReviewSession() {
   };
 
   // 加载中
-  if (loading) {
+  if (status === 'loading') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -246,25 +222,25 @@ export default function ReviewSession() {
   }
 
   // 错误或完成状态
-  if (error) {
-    const isComplete = error === '复习完成';
+  if (status === 'error' || status === 'completed') {
+    const isComplete = status === 'completed';
     const isNoTask = error === '暂无复习任务';
     
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
           <div className="text-6xl mb-4">
-            {isComplete ? '🎉' : isNoTask ? '📚' : '⚠️'}
+            {isComplete && !isNoTask ? '🎉' : '📚'}
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            {isComplete ? '太棒了！' : isNoTask ? '暂无复习任务' : '出错了'}
+            {isComplete && !isNoTask ? '太棒了！' : '提示'}
           </h2>
+
           <p className="text-gray-600 mb-6">
-            {isComplete 
-              ? `今日复习任务已完成！共复习 ${completedCount} 个词义，正确 ${correctCount} 个。` 
-              : isNoTask
-              ? '今天暂时没有需要复习的内容，继续学习新单词吧！'
-              : error}
+            {isComplete && !isNoTask
+              ? `今日复习任务已完成！共复习 ${completedCount} 个词义，正确 ${correctCount} 个。`
+              : error /* 显示“暂无复习任务”或其他错误 */
+            }
           </p>
           <button
             onClick={handleBackToPlan}
@@ -277,7 +253,7 @@ export default function ReviewSession() {
     );
   }
 
-  if (reviewList.length === 0) return null;
+  if (status !== 'reviewing' || reviewList.length === 0) return null;
 
   const currentReview = reviewList[currentIndex];
   const progress = `${currentIndex + 1}/${totalReviews}`;
@@ -363,8 +339,8 @@ export default function ReviewSession() {
           </div>
 
           {/* 情境引入：例句 */}
-          {firstExample && (() => {
-            const { parts, actualWords } = splitSentenceWithHighlight(firstExample.sentence, firstExample.highlightWord);
+          {firstExample ? (() => {
+            const { parts, actualWords } = splitSentenceWithHighlight(firstExample.sentence, currentReview.word);
             let wordIndex = 0;
             
             return (
@@ -397,12 +373,16 @@ export default function ReviewSession() {
                     }
                   })}
                 </p>
-                {firstExample.source && (
-                  <p className="text-xs text-blue-600 mt-2">— {firstExample.source}</p>
+                {firstExample.sourceDetail && (
+                  <p className="text-xs text-blue-600 mt-2">— {firstExample.sourceDetail}</p>
                 )}
               </div>
             );
-          })()}
+          })() : (
+            <div className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-500 text-center">暂无例句</p>
+            </div>
+          )}
 
           {/* 复习模式：选择题 or 拼写输入 */}
           {!showFeedback ? (
@@ -509,11 +489,11 @@ export default function ReviewSession() {
                 <p className="text-gray-800 mb-3">{currentReview.definition}</p>
 
                 {/* 相关信息 */}
-                {currentReview.relatedInfo && typeof currentReview.relatedInfo === 'object' && currentReview.relatedInfo.synonyms && currentReview.relatedInfo.synonyms.length > 0 && (
+                {currentReview.extra && typeof currentReview.extra === 'object' && currentReview.extra.synonyms && currentReview.extra.synonyms.length > 0 && (
                   <div className="mb-3">
                     <span className="text-sm text-gray-600">近义词：</span>
                     <span className="text-sm text-blue-600 ml-2">
-                      {currentReview.relatedInfo.synonyms.join('、')}
+                      {currentReview.extra.synonyms.join('、')}
                     </span>
                   </div>
                 )}
