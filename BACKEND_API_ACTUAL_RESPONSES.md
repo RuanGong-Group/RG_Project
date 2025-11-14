@@ -103,7 +103,7 @@
         ]
       }
     ],
-    "totalMeanings": 1,
+    "lemma": "example",
     "masteryFocus": "recognition",
     "bookTag": "高中词汇"
   }
@@ -134,7 +134,7 @@
     "pronunciation": { "uk": "", "us": "" },
     "partOfSpeech": "n.",
     "definition": "...",
-    "relatedInfo": null,
+    "extra": null,
     "examples": [ /* 同上示例数组 */ ],
     "masteryFocus": "recognition",
     "bookTag": "高中词汇"
@@ -144,7 +144,7 @@
 
 3) POST /api/learning/progress
 
-请求体：{ "meaningId": number, "isCorrect": boolean }
+请求体：{ "results": [{ "meaningId": number, "isCorrect": boolean }] }
 
 成功示例：
 
@@ -152,12 +152,13 @@
 {
   "success": true,
   "message": "学习进度更新成功",
-  "data": {
-    "masteryLevel": 2,
-    "nextReviewAt": "2025-10-29T...Z",
-    "consecutiveCorrect": 1,
-    "reviewCount": 3
-  }
+  "data": [
+    {
+      "meaningId": 501,
+      "masteryLevel": 2,
+      "nextReviewAt": "2025-10-29T...Z"
+    }
+  ]
 }
 ```
 
@@ -190,7 +191,7 @@
         "pronunciation": { "uk": "", "us": "" },
         "partOfSpeech": "n.",
         "definition": "...",
-        "relatedInfo": null,
+        "extra": null,
         "examples": [ /* 例句数组 */ ],
         "reviewMode": "recognition",
         "masteryLevel": 2,
