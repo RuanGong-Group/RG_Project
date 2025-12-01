@@ -1,0 +1,10 @@
+requests
+edge-tts
+moviepy==1.0.3
+python-dotenv
+gTTS
+pyttsx3
+pyyaml
+Pillow
+numpy
+

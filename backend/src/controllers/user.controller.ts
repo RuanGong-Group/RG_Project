@@ -4,8 +4,8 @@
  */
 
 import { Response } from 'express';
-import prisma from '../utils/prisma';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { userService } from '../services/user.service';
 
 /**
  * 获取用户的每日学习目标
@@ -26,17 +26,18 @@ export const getDailyGoal = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    // 查询用户的每日目标
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        username: true,
-        dailyLearningGoal: true
-      }
+    const data = await userService.getDailyGoal(userId);
+
+    res.json({
+      success: true,
+      message: '获取每日目标成功',
+      data
     });
 
-    if (!user) {
+  } catch (error) {
+    console.error('获取每日目标失败:', error);
+    
+    if (error instanceof Error && error.message === '用户不存在') {
       res.status(404).json({
         success: false,
         message: '用户不存在'
@@ -44,18 +45,6 @@ export const getDailyGoal = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    res.json({
-      success: true,
-      message: '获取每日目标成功',
-      data: {
-        userId: user.id,
-        username: user.username,
-        dailyGoal: user.dailyLearningGoal
-      }
-    });
-
-  } catch (error) {
-    console.error('获取每日目标失败:', error);
     res.status(500).json({
       success: false,
       message: '获取每日目标失败',
@@ -105,8 +94,18 @@ export const updateDailyGoal = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    // 验证范围
-    if (dailyGoal < 1 || dailyGoal > 300) {
+    const data = await userService.updateDailyGoal(userId, dailyGoal);
+
+    res.json({
+      success: true,
+      message: '更新每日目标成功',
+      data
+    });
+
+  } catch (error) {
+    console.error('更新每日目标失败:', error);
+
+    if (error instanceof Error && error.message === '每日目标必须在1-300之间') {
       res.status(400).json({
         success: false,
         message: '每日目标必须在1-300之间'
@@ -114,31 +113,6 @@ export const updateDailyGoal = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    // 更新用户的每日目标
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        dailyLearningGoal: dailyGoal
-      },
-      select: {
-        id: true,
-        username: true,
-        dailyLearningGoal: true
-      }
-    });
-
-    res.json({
-      success: true,
-      message: '更新每日目标成功',
-      data: {
-        userId: updatedUser.id,
-        username: updatedUser.username,
-        dailyGoal: updatedUser.dailyLearningGoal
-      }
-    });
-
-  } catch (error) {
-    console.error('更新每日目标失败:', error);
     res.status(500).json({
       success: false,
       message: '更新每日目标失败',

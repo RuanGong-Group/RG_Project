@@ -79,12 +79,54 @@ export const bookApi = {
   },
 
   /**
-   * 切换当前学习词书
-   * PUT /api/user/current-book
-   * 注意：请求体字段是 bookId 而非 bookTagId
+  * 切换当前学习词书
+  * PUT /api/user/current-book
+  * 请求体字段使用后端权威 `bookTagId`
    */
   async updateCurrentBook(data: UpdateCurrentBookRequest): Promise<Book> {
     const response = await apiClient.put<ApiResponse<Book>>('/user/current-book', data);
+    return response.data.data;
+  },
+
+  /**
+   * 获取词书中的单词列表（已应用稳定乱序）
+   * GET /api/books/:bookId/words
+   */
+  async getBookWords(bookId: number, limit = 20, includeProgress = true): Promise<{
+    bookId: number;
+    bookName: string;
+    salt: string;
+    words: Array<{
+      wordId: number;
+      word: string;
+      lemma: string;
+      pronunciations: any;
+      meanings: Array<{
+        meaningId: number;
+        partOfSpeech: string;
+        definition: string;
+        progress?: {
+          masteryLevel: number;
+          nextReviewAt: string;
+        } | null;
+      }>;
+    }>;
+    total: number;
+  }> {
+    const response = await apiClient.get(`/books/${bookId}/words?limit=${limit}&includeProgress=${includeProgress}`);
+    return response.data.data;
+  },
+
+  /**
+   * 重新乱序词书
+   * POST /api/books/:bookId/reshuffle
+   */
+  async reshuffleBook(bookId: number): Promise<{
+    bookId: number;
+    oldSalt: string;
+    newSalt: string;
+  }> {
+    const response = await apiClient.post(`/books/${bookId}/reshuffle`);
     return response.data.data;
   }
 };
@@ -126,6 +168,47 @@ export const learningApi = {
    */
   async submitProgress(data: SubmitProgressRequest): Promise<SubmitProgressResponse> {
     const response = await apiClient.post<ApiResponse<SubmitProgressResponse>>('/learning/progress', data);
+    return response.data.data;
+  }
+};
+
+/**
+ * Learning Session (三路径) API
+ */
+export const learningSessionApi = {
+  /**
+   * Start a session
+   * POST /api/learning/session/start
+   */
+  async startSession(data?: any): Promise<any> {
+    const response = await apiClient.post<ApiResponse<any>>('/learning/session/start', data || {});
+    return response.data.data;
+  },
+
+  /**
+   * Action on session (choosePath / submitAnswer / skipMeaning / heartbeat)
+   * POST /api/learning/session/action
+   */
+  async actionSession(payload: { sessionId: string; action: string; payload?: any }): Promise<any> {
+    const response = await apiClient.post<ApiResponse<any>>('/learning/session/action', payload);
+    return response.data.data;
+  },
+
+  /**
+   * Get session state
+   * GET /api/learning/session/:sessionId/state
+   */
+  async getSessionState(sessionId: string): Promise<any> {
+    const response = await apiClient.get<ApiResponse<any>>(`/learning/session/${encodeURIComponent(sessionId)}/state`);
+    return response.data.data;
+  }
+  ,
+  /**
+   * Get next questions/steps for a session
+   * GET /api/learning/session/:sessionId/next-questions?count=N
+   */
+  async getNextQuestions(sessionId: string, count = 3): Promise<any> {
+    const response = await apiClient.get<ApiResponse<any>>(`/learning/session/${encodeURIComponent(sessionId)}/next-questions?count=${count}`);
     return response.data.data;
   }
 };

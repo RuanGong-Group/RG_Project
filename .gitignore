@@ -12,6 +12,10 @@ node_modules
 .next/
 /out/
 
+# Vite
+.vite
+*.local
+
 # Local Environment
 .env
 .env.local
@@ -45,3 +49,16 @@ pnpm-debug.log*
 # Prisma
 backend/node_modules/.prisma/client/
 backend/prisma/dev.db
+
+# Data & Media (Local only)
+RG_data/
+backend/scripts/video_gen/output/
+backend/scripts/video_gen/venv/
+backend/scripts/video_gen/__pycache__/
+*.mp4
+*.mp3
+*.wav
+*.jpg
+*.png
+!backend/public/images/  # Keep public assets if any
+

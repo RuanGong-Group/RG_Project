@@ -32,13 +32,54 @@ model User {
   learningProgress  UserLearningProgress[]
   wordNotebook      UserWordNotebook[]
   dailyCheckIns     DailyCheckIn[]
+  userBookSettings  UserBookSettings[]
   achievements      UserAchievement[]
+  videoJobs         VideoGenerationJob[]
 
   @@map("users")
 }
 
 // ============================================
+// 视频生成相关表
+// ============================================
+
+/// 视频生成任务表
+model VideoGenerationJob {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @map("user_id")
+  jobId           String    @unique @map("job_id") @db.VarChar(255) // UUID
+  
+  // 配置信息
+  videoType       String    @map("video_type") @db.VarChar(50) // 'daily_learning', 'daily_review', 'custom'
+  wordIds         Json      @map("word_ids") // 包含的单词ID数组
+  templateType    String    @map("template_type") @db.VarChar(50) // 'mystery', 'scifi', 'daily'
+  
+  // 状态追踪
+  status          String    @default("pending") @db.VarChar(50) // 'pending', 'processing', 'completed', 'failed'
+  progress        Int       @default(0) // 0-100
+  errorMessage    String?   @map("error_message") @db.Text
+  
+  // 结果信息
+  videoPath       String?   @map("video_path") @db.VarChar(500) // 相对路径
+  videoUrl        String?   @map("video_url") @db.VarChar(500)  // 云存储URL
+  duration        Float?    // 视频时长(秒)
+  scenes          Json?     // 场景详情
+  
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  completedAt     DateTime? @map("completed_at") @db.Timestamp(0)
+  
+  // 关联
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([jobId])
+  @@index([status])
+  @@map("video_generation_jobs")
+}
+
+// ============================================
 // 单词数据表 (V2 Structure)
+
 // ============================================
 
 /// 单词基础表 - 存储单词原文、原型和音标
@@ -93,6 +134,7 @@ model ExamplePool {
   sentence     String    @db.Text
   sourceType   String    @map("source_type") @db.VarChar(50) // 'ecdict', 'true_exam', 'ai_generated', 'user_added'
   sourceDetail String?   @map("source_detail") @db.VarChar(255) // 'CET-4 2023.12 Set 1'
+  translation  String?   @db.Text // 中文翻译
   embedding    Bytes?    // 句向量
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
@@ -136,6 +178,7 @@ model BookTag {
   // 关联关系
   words         WordTagRelation[]
   users         User[]            @relation("UserCurrentBook")
+  userBookSettings UserBookSettings[]
 
   @@index([tagName])
   @@map("book_tags")
@@ -155,6 +198,27 @@ model WordTagRelation {
   @@index([wordId])
   @@index([bookTagId])
   @@map("word_tag_relations")
+}
+
+/// 用户-词书配置表 - 存储用户在特定词书下的偏好与稳定乱序 salt
+model UserBookSettings {
+  id                 Int      @id @default(autoincrement())
+  userId             Int      @map("user_id")
+  bookTagId          Int      @map("book_tag_id")
+  salt               String   @db.VarChar(255) // 用于稳定乱序的持久化 salt
+  shuffleAlgorithm   String   @default("stable_hash") @map("shuffle_algorithm") @db.VarChar(50) // 'stable_hash' 等
+  preferences        Json?    // 可扩展的用户偏好 JSON
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  // 关联关系
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookTag            BookTag  @relation(fields: [bookTagId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookTagId])
+  @@index([userId])
+  @@index([bookTagId])
+  @@map("user_book_settings")
 }
 
 // ============================================

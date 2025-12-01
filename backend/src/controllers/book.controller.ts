@@ -4,8 +4,8 @@
  */
 
 import { Response } from 'express';
-import prisma from '../utils/prisma';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { bookService } from '../services/book.service';
 
 /**
  * 获取所有词书列表
@@ -13,28 +13,7 @@ import { AuthRequest } from '../middleware/auth.middleware';
  */
 export const getAllBooks = async (_req: AuthRequest, res: Response) => {
   try {
-    // 查询所有词书，并统计每个词书的单词数量
-    const books = await prisma.bookTag.findMany({
-      include: {
-        _count: {
-          select: {
-            words: true // 统计关联的单词数量
-          }
-        }
-      },
-      orderBy: {
-        id: 'asc'
-      }
-    });
-
-    // 格式化返回数据
-    const formattedBooks = books.map(book => ({
-      id: book.id,
-      tagName: book.tagName,
-      isUserDefined: book.isUserDefined,
-      wordCount: book._count.words,
-      createdAt: book.createdAt
-    }));
+    const formattedBooks = await bookService.getAllBooks();
 
     res.json({
       success: true,
@@ -66,46 +45,15 @@ export const getCurrentBook = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // 查询用户信息，包括当前选择的词书
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        currentBookTag: {
-          include: {
-            _count: {
-              select: {
-                words: true
-              }
-            }
-          }
-        }
-      }
-    });
+    const currentBook = await bookService.getCurrentBook(userId);
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: '用户不存在'
-      });
-    }
-
-    // 如果用户还没有选择词书
-    if (!user.currentBookTag) {
+    if (!currentBook) {
       return res.json({
         success: true,
         data: null,
         message: '用户尚未选择学习词书'
       });
     }
-
-    // 返回当前词书信息
-    const currentBook = {
-      id: user.currentBookTag.id,
-      tagName: user.currentBookTag.tagName,
-      isUserDefined: user.currentBookTag.isUserDefined,
-      wordCount: user.currentBookTag._count.words,
-      createdAt: user.currentBookTag.createdAt
-    };
 
     return res.json({
       success: true,
@@ -114,6 +62,14 @@ export const getCurrentBook = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     console.error('获取当前词书失败:', error);
+    
+    if (error instanceof Error && error.message === '用户不存在') {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: '获取当前词书失败',
@@ -125,12 +81,12 @@ export const getCurrentBook = async (req: AuthRequest, res: Response) => {
 /**
  * 切换当前学习词书
  * PUT /api/user/current-book
- * Body: { bookId: number }
+ * Body: { bookTagId: number }
  */
 export const updateCurrentBook = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const { bookId } = req.body as { bookId: number };
+    const { bookTagId } = req.body as { bookTagId: number };
 
     if (!userId) {
       return res.status(401).json({
@@ -140,59 +96,14 @@ export const updateCurrentBook = async (req: AuthRequest, res: Response) => {
     }
 
     // 验证请求参数
-    if (!bookId || typeof bookId !== 'number') {
+    if (!bookTagId || typeof bookTagId !== 'number') {
       return res.status(400).json({
         success: false,
         message: '请提供有效的词书ID'
       });
     }
 
-    // 检查词书是否存在
-    const book = await prisma.bookTag.findUnique({
-      where: { id: bookId },
-      include: {
-        _count: {
-          select: {
-            words: true
-          }
-        }
-      }
-    });
-
-    if (!book) {
-      return res.status(404).json({
-        success: false,
-        message: '指定的词书不存在'
-      });
-    }
-
-    // 更新用户的当前词书
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        currentBookTagId: bookId
-      },
-      include: {
-        currentBookTag: {
-          include: {
-            _count: {
-              select: {
-                words: true
-              }
-            }
-          }
-        }
-      }
-    });
-
-    // 返回更新后的词书信息
-    const currentBook = {
-      id: updatedUser.currentBookTag!.id,
-      tagName: updatedUser.currentBookTag!.tagName,
-      isUserDefined: updatedUser.currentBookTag!.isUserDefined,
-      wordCount: updatedUser.currentBookTag!._count.words,
-      createdAt: updatedUser.currentBookTag!.createdAt
-    };
+    const currentBook = await bookService.updateCurrentBook(userId, bookTagId);
 
     return res.json({
       success: true,
@@ -201,6 +112,14 @@ export const updateCurrentBook = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     console.error('切换词书失败:', error);
+
+    if (error instanceof Error && error.message === '指定的词书不存在') {
+      return res.status(404).json({
+        success: false,
+        message: '指定的词书不存在'
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: '切换词书失败',
@@ -208,3 +127,109 @@ export const updateCurrentBook = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+/**
+ * 获取词书的单词列表（带稳定乱序）
+ * GET /api/books/:bookId/words
+ * Query: limit (可选，默认50), offset (可选，默认0), includeProgress (可选，是否包含学习进度)
+ */
+export const getBookWords = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const bookId = parseInt(req.params.bookId);
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200); // 最大200
+    const offset = parseInt(req.query.offset as string) || 0;
+    const includeProgress = req.query.includeProgress === 'true';
+
+    console.log('🔍 getBookWords - userId:', userId, 'bookId:', bookId);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: '用户未认证'
+      });
+    }
+
+    if (isNaN(bookId)) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的词书ID'
+      });
+    }
+
+    const result = await bookService.getBookWords(userId, bookId, limit, offset, includeProgress);
+
+    return res.json({
+      success: true,
+      data: result,
+      message: '成功获取词书单词列表'
+    });
+  } catch (error) {
+    console.error('获取词书单词列表失败:', error);
+
+    if (error instanceof Error && error.message === '词书不存在') {
+      return res.status(404).json({
+        success: false,
+        message: '词书不存在'
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: '获取词书单词列表失败',
+      error: error instanceof Error ? error.message : '未知错误'
+    });
+  }
+};
+
+/**
+ * 重新乱序词书
+ * POST /api/books/:bookId/reshuffle
+ */
+export const reshuffleBook = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const bookId = parseInt(req.params.bookId);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: '用户未认证'
+      });
+    }
+
+    if (isNaN(bookId)) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的词书ID'
+      });
+    }
+
+    const result = await bookService.reshuffleBook(userId, bookId);
+
+    return res.json({
+      success: true,
+      data: {
+        bookId: result.bookId,
+        salt: result.salt.substring(0, 8) + '...' // 只返回部分salt用于确认
+      },
+      message: `成功重新乱序词书：${result.bookName}`
+    });
+  } catch (error) {
+    console.error('重新乱序失败:', error);
+
+    if (error instanceof Error && error.message === '词书不存在') {
+      return res.status(404).json({
+        success: false,
+        message: '词书不存在'
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: '重新乱序失败',
+      error: error instanceof Error ? error.message : '未知错误'
+    });
+  }
+};
+

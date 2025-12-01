@@ -10,7 +10,10 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "import-wordbook": "ts-node import-wordbook.ts"
+    "refresh-pool": "ts-node-dev --respawn scripts/refresh-learning-pool.ts",
+    "cleanup-video": "ts-node src/tasks/video-cleanup.task.ts",
+    "extract-api-docs": "ts-node scripts/extract-api-docs.ts",
+    "docs": "npm run extract-api-docs"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -24,18 +27,25 @@
   "license": "MIT",
   "dependencies": {
     "@prisma/client": "^5.6.0",
+    "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
+    "compromise": "^14.14.4",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^16.6.1",
     "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "pdf-parse": "^1.1.4",
+    "redis": "^5.9.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.5",
-    "@types/node": "^20.19.24",
+    "@types/node": "^20.19.25",
+    "@types/pdf-parse": "^1.1.5",
+    "mammoth": "^1.11.0",
     "prisma": "^5.22.0",
     "ts-node": "^10.9.1",
     "ts-node-dev": "^2.0.0",

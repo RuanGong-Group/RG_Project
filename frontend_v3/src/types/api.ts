@@ -15,6 +15,7 @@ export interface ApiResponse<T = any> {
   success: boolean;
   message: string;
   data: T;
+  code?: string;
 }
 
 export interface ApiError {
@@ -79,7 +80,7 @@ export interface Meaning {
 export interface WordToLearn {
   wordId: number;
   word: string;
-  pronunciation: Pronunciation;
+  pronunciations: Pronunciation;
   lemma?: string | null;
   meanings: Meaning[];
   masteryFocus: 'recognition' | 'production';
@@ -89,7 +90,7 @@ export interface WordToLearn {
 export interface LearningContent {
   meaningId: number;
   word: string;
-  pronunciation: Pronunciation;
+  pronunciations: Pronunciation;
   partOfSpeech: string;
   definition: string;
   extra: any | null;
@@ -116,7 +117,7 @@ export interface ReviewItem {
   progressId: number;
   meaningId: number;
   word: string;
-  pronunciation: Pronunciation;
+  pronunciations: Pronunciation;
   partOfSpeech: string;
   definition: string;
   extra: any | null;
@@ -197,11 +198,6 @@ export interface TodayPlanResponse {
     available: number;
     words: NewWordItem[];
   };
-  allocation: {
-    reviewPriority: number;
-    newLearningSlots: number;
-    totalPlanned: number;
-  };
 }
 
 // ============================================
@@ -217,7 +213,7 @@ export interface Book {
 }
 
 export interface UpdateCurrentBookRequest {
-  bookId: number; // ⚠️ 注意：是 bookId 不是 bookTagId
+  bookTagId: number; // 使用后端权威字段名 `bookTagId`
 }
 
 // ============================================
@@ -289,7 +285,7 @@ export interface NotebookWord {
   notebookId: number;
   wordId: number;
   word: string;
-  pronunciation: Pronunciation;
+  pronunciations: Pronunciation;
   addedAt: string;
   meanings: NotebookMeaning[];
 }
@@ -386,6 +382,77 @@ export interface SubmitProgressResponse {
   masteryLevel: number;
   nextReviewAt: string;
 }[]
+
+// ============================================
+// Learning Session (三路径 V3) 相关类型
+// ============================================
+
+export interface SessionWordBrief {
+  id: number;
+  word: string;
+  lemma?: string | null;
+  pronunciations?: Pronunciation | null;
+}
+
+export interface ShowSentencePayload {
+  word: SessionWordBrief;
+  meaningId: number;
+  sentence: string;
+  highlightWord: string;
+  attempt: number;
+}
+
+export interface QuestionOption {
+  id: number;
+  text: string;
+}
+
+export interface ShowQuestionPayload {
+  questionId: string;
+  meaningId: number;
+  prompt: string;
+  options: QuestionOption[];
+  timeLimitSec: number;
+  isBooster?: boolean; // ✨ 2025-11-19 新增：区分普通题/Booster题
+  sentence?: string; // ✨ 2025-11-19 新增：例句回顾
+  word?: {
+    word: string;
+    lemma?: string;
+    pronunciations?: Pronunciation;
+  };
+  wordProgress?: {
+    currentMeaning: number;
+    totalMeanings: number;
+  };
+}
+
+export interface ShowCardPayload {
+  meaningId: number;
+  isCorrect?: boolean; // 是否答对
+  showResult?: boolean; // 是否显示结果（Booster简化反馈时为false）
+  card: {
+    definition: string;
+    partOfSpeech?: string;
+    pronunciations?: Pronunciation | null;
+    examples?: { id: number; sentence: string }[];
+  };
+  wordProgress?: {
+    currentMeaning: number;
+    totalMeanings: number;
+  };
+}
+
+export type SessionResponse =
+  | { sessionId: string; type: 'show-sentence'; data: ShowSentencePayload; step?: number }
+  | { sessionId: string; type: 'show-question'; data: ShowQuestionPayload; step?: number }
+  | { sessionId: string; type: 'show-booster-question'; data: ShowQuestionPayload; step?: number }
+  | { sessionId: string; type: 'show-spelling-question'; data: any; step?: number } // 拼写题(复习模式-production)
+  | { sessionId: string; type: 'show-card'; data: ShowCardPayload; step?: number }
+  | { sessionId: string; type: 'show-word-summary'; data: any; step?: number }
+  | { sessionId: string; type: 'next-meaning'; data: any; step?: number }
+  | { sessionId: string; type: 'continue-next'; data?: any; step?: number; message?: string } // ✨ Booster答对后的轻反馈
+  | { sessionId: string; type: 'session-complete'; data: any; step?: number };
+
 
 // ============================================
 // 统计相关类型

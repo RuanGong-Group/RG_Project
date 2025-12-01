@@ -62,7 +62,7 @@ async function main() {
   const word1 = await prisma.word.create({
     data: {
       word: 'word',
-      pronunciation: { uk: '/wɜːd/', us: '/wɝːd/' },
+      pronunciation: JSON.stringify({ uk: '/wɜːd/', us: '/wɝːd/' }),
       meanings: {
         create: [
           {
@@ -96,7 +96,7 @@ async function main() {
   const word2 = await prisma.word.create({
     data: {
       word: 'study',
-      pronunciation: { uk: '/ˈstʌdi/', us: '/ˈstʌdi/' },
+      pronunciation: JSON.stringify({ uk: '/ˈstʌdi/', us: '/ˈstʌdi/' }),
       meanings: {
         create: [
           { partOfSpeech: 'v.', definition: '学习，研究' },
@@ -119,7 +119,7 @@ async function main() {
   const word3 = await prisma.word.create({
     data: {
       word: 'learn',
-      pronunciation: { uk: '/lɜːn/', us: '/lɝːn/' },
+      pronunciation: JSON.stringify({ uk: '/lɜːn/', us: '/lɝːn/' }),
       meanings: {
         create: [
           {
@@ -145,7 +145,7 @@ async function main() {
   const word_go = await prisma.word.create({
     data: {
       word: 'go',
-      pronunciation: { uk: '/ɡəʊ/', us: '/ɡoʊ/' },
+      pronunciation: JSON.stringify({ uk: '/ɡəʊ/', us: '/ɡoʊ/' }),
       meanings: {
         create: [{ partOfSpeech: 'v.', definition: '去，往' }],
       },
@@ -158,12 +158,10 @@ async function main() {
   const word_went = await prisma.word.create({
     data: {
       word: 'went',
-      pronunciation: { uk: '/went/', us: '/went/' },
+      pronunciation: JSON.stringify({ uk: '/went/', us: '/went/' }),
       // 核心：关联到原型 'go'
       lemma: 'go',
-      prototype: {
-        connect: { id: word_go.id },
-      },
+      lemmaId: word_go.id,
       meanings: {
         create: [{ partOfSpeech: 'v.', definition: 'go的过去式' }],
       },

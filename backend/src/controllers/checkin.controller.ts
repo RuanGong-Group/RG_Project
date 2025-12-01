@@ -244,21 +244,18 @@ export const updateTodayCheckIn = async (
     };
 
     if (type === 'learn') {
-      // 单词学习完成（所有词义都学完了）
+      // 单词学习完成（仅增加单词计数，词义计数由 learn-meaning 处理）
       updateData = {
-        wordsLearned: { increment: 1 },
-        meaningsLearned: { increment: metadata?.meaningCount || 1 }
+        wordsLearned: { increment: 1 }
       };
       createData.wordsLearned = 1;
-      createData.meaningsLearned = metadata?.meaningCount || 1;
+      // 如果是新创建记录，meaningsLearned 默认为 0，后续由 learn-meaning 更新
     } else if (type === 'review') {
       // 单词复习完成
       updateData = {
-        wordsReviewed: { increment: 1 },
-        meaningsReviewed: { increment: metadata?.meaningCount || 1 }
+        wordsReviewed: { increment: 1 }
       };
       createData.wordsReviewed = 1;
-      createData.meaningsReviewed = metadata?.meaningCount || 1;
     } else if (type === 'learn-meaning') {
       // 单个词义学习（不增加单词计数）
       updateData = {
@@ -274,15 +271,34 @@ export const updateTodayCheckIn = async (
     }
 
     // 执行 upsert 操作
-    await prisma.dailyCheckIn.upsert({
-      where: {
-        userId_checkInDate: {
-          userId: userId,
-          checkInDate: today
+    // 注意: 使用 transaction 避免竞态条件
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.dailyCheckIn.findUnique({
+        where: {
+          userId_checkInDate: {
+            userId: userId,
+            checkInDate: today
+          }
         }
-      },
-      update: updateData,
-      create: createData
+      });
+
+      if (existing) {
+        // 记录已存在，执行更新
+        await tx.dailyCheckIn.update({
+          where: {
+            userId_checkInDate: {
+              userId: userId,
+              checkInDate: today
+            }
+          },
+          data: updateData
+        });
+      } else {
+        // 记录不存在，创建新记录
+        await tx.dailyCheckIn.create({
+          data: createData
+        });
+      }
     });
 
     // 检查是否完成目标（异步更新，不阻塞主流程）

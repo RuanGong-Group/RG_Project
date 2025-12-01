@@ -126,7 +126,7 @@ export default function Settings() {
 
       await axios.put(
         `${API_BASE_URL}/user/current-book`,
-        { bookId: selectedBookId },
+        { bookTagId: selectedBookId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -239,7 +239,7 @@ export default function Settings() {
 
         {/* 词书设置卡片 */}
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">📖 当前词书</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">📚 词书管理</h2>
           
           {currentBook && (
             <div className="mb-4 p-4 bg-blue-50 rounded-lg">
@@ -248,7 +248,12 @@ export default function Settings() {
                   <div className="font-medium text-gray-900">{currentBook.tagName}</div>
                   <div className="text-sm text-gray-600">共 {currentBook.wordCount} 个单词</div>
                 </div>
-                <span className="text-2xl">✅</span>
+                <button
+                  onClick={() => navigate(`/books/${currentBook.id}`)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  查看详情 →
+                </button>
               </div>
             </div>
           )}

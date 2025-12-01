@@ -1,7 +1,6 @@
 import { Response } from 'express';
-import prisma from '../utils/prisma';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { safeJsonParse } from '../utils/datetime';
+import { notebookService } from '../services/notebook.service';
 
 /**
  * 添加单词到生词本
@@ -28,42 +27,7 @@ export async function addWordToNotebook(req: AuthRequest, res: Response) {
       });
     }
 
-    // 检查单词是否存在
-    const word = await prisma.word.findUnique({
-      where: { id: wordId }
-    });
-
-    if (!word) {
-      return res.status(404).json({
-        success: false,
-        message: '单词不存在'
-      });
-    }
-
-    // 检查是否已经在生词本中
-    const existing = await prisma.userWordNotebook.findUnique({
-      where: {
-        userId_wordId: {
-          userId,
-          wordId
-        }
-      }
-    });
-
-    if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: '单词已在生词本中'
-      });
-    }
-
-    // 添加到生词本
-    const notebookEntry = await prisma.userWordNotebook.create({
-      data: {
-        userId,
-        wordId
-      }
-    });
+    const notebookEntry = await notebookService.addWordToNotebook(userId, wordId);
 
     return res.json({
       success: true,
@@ -72,6 +36,22 @@ export async function addWordToNotebook(req: AuthRequest, res: Response) {
     });
   } catch (error) {
     console.error('添加生词本失败:', error);
+    
+    if (error instanceof Error) {
+      if (error.message === '单词不存在') {
+        return res.status(404).json({
+          success: false,
+          message: '单词不存在'
+        });
+      }
+      if (error.message === '单词已在生词本中') {
+        return res.status(400).json({
+          success: false,
+          message: '单词已在生词本中'
+        });
+      }
+    }
+
     return res.status(500).json({
       success: false,
       message: '服务器错误'
@@ -105,32 +85,7 @@ export async function removeWordFromNotebook(req: AuthRequest, res: Response) {
       });
     }
 
-    // 检查是否在生词本中
-    const existing = await prisma.userWordNotebook.findUnique({
-      where: {
-        userId_wordId: {
-          userId,
-          wordId
-        }
-      }
-    });
-
-    if (!existing) {
-      return res.status(404).json({
-        success: false,
-        message: '单词不在生词本中'
-      });
-    }
-
-    // 删除
-    await prisma.userWordNotebook.delete({
-      where: {
-        userId_wordId: {
-          userId,
-          wordId
-        }
-      }
-    });
+    await notebookService.removeWordFromNotebook(userId, wordId);
 
     return res.json({
       success: true,
@@ -138,6 +93,14 @@ export async function removeWordFromNotebook(req: AuthRequest, res: Response) {
     });
   } catch (error) {
     console.error('删除生词本失败:', error);
+
+    if (error instanceof Error && error.message === '单词不在生词本中') {
+      return res.status(404).json({
+        success: false,
+        message: '单词不在生词本中'
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: '服务器错误'
@@ -161,59 +124,11 @@ export async function getNotebookWords(req: AuthRequest, res: Response) {
       return;
     }
 
-    // 获取生词本中的所有单词，包含完整信息
-    const notebookEntries = await prisma.userWordNotebook.findMany({
-      where: { userId },
-      include: {
-        word: {
-          include: {
-            partsOfSpeech: {
-              include: {
-                meanings: {
-                  include: {
-                    examples: {
-                      include: {
-                        example: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      orderBy: {
-        addedAt: 'desc'
-      }
-    });
-
-    // 格式化响应数据
-    const words = notebookEntries.map(entry => ({
-      notebookId: entry.id,
-      wordId: entry.wordId,
-      word: entry.word.word,
-      pronunciation: safeJsonParse(entry.word.pronunciation, { uk: '', us: '' }),
-      addedAt: entry.addedAt,
-      meanings: entry.word.partsOfSpeech.flatMap(pos => 
-        pos.meanings.map(meaning => ({
-          meaningId: meaning.id,
-          partOfSpeech: pos.partOfSpeech,
-          definition: meaning.definition,
-          examples: meaning.examples.map(rel => ({
-            sentence: rel.example.sentence,
-            highlightWord: rel.highlightWord
-          }))
-        }))
-      )
-    }));
+    const data = await notebookService.getNotebookWords(userId);
 
     return res.json({
       success: true,
-      data: {
-        total: words.length,
-        words
-      }
+      data
     });
   } catch (error) {
     console.error('获取生词本失败:', error);

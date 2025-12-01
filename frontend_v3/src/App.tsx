@@ -2,16 +2,18 @@
  * 应用主组件
  */
 
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, RouteObject, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Home from './pages/Home';
 import TodayPlan from './pages/TodayPlan';
-import LearningSession from './pages/LearningSession';
-import ReviewSession from './pages/ReviewSession';
+import SessionLearning from './pages/SessionLearning';
 import Stats from './pages/Stats';
 import Settings from './pages/Settings';
+import BookWordsTest from './pages/BookWordsTest';
+import BookDetail from './pages/BookDetail';
+import VideoPlayerPage from './pages/VideoPlayerPage';
 
 // 受保护的路由组件
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -24,61 +26,26 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+const routes: RouteObject[] = [
+  { path: '/login', element: <Login /> },
+  { path: '/register', element: <Register /> },
+  { path: '/', element: <ProtectedRoute><Home /></ProtectedRoute> },
+  { path: '/today-plan', element: <ProtectedRoute><TodayPlan /></ProtectedRoute> },
+  { path: '/learn', element: <ProtectedRoute><SessionLearning /></ProtectedRoute> }, // 重定向旧路由到新组件
+  { path: '/session-learn', element: <ProtectedRoute><SessionLearning /></ProtectedRoute> },
+  { path: '/stats', element: <ProtectedRoute><Stats /></ProtectedRoute> },
+  { path: '/settings', element: <ProtectedRoute><Settings /></ProtectedRoute> },
+  { path: '/books/:bookId', element: <ProtectedRoute><BookDetail /></ProtectedRoute> },
+  { path: '/test-shuffle', element: <ProtectedRoute><BookWordsTest /></ProtectedRoute> },
+  { path: '/daily-video', element: <ProtectedRoute><VideoPlayerPage /></ProtectedRoute> },
+];
+
+const router = createBrowserRouter(routes, {
+  future: {
+    v7_relativeSplatPath: true,
+  },
+});
+
 export default function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/today-plan"
-          element={
-            <ProtectedRoute>
-              <TodayPlan />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/learn"
-          element={
-            <ProtectedRoute>
-              <LearningSession />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/review"
-          element={
-            <ProtectedRoute>
-              <ReviewSession />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/stats"
-          element={
-            <ProtectedRoute>
-              <Stats />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </BrowserRouter>
-  );
+  return <RouterProvider router={router} />;
 }
