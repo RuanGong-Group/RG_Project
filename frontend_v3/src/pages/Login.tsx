@@ -38,21 +38,22 @@ export default function Login() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#f5f5f5'
+      backgroundColor: '#fffbeb'
     }}>
       <div style={{
         width: '100%',
         maxWidth: '400px',
         padding: '32px',
         backgroundColor: 'white',
-        borderRadius: '8px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        borderRadius: '12px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
       }}>
         <h1 style={{
           fontSize: '24px',
           fontWeight: 'bold',
           marginBottom: '24px',
-          textAlign: 'center'
+          textAlign: 'center',
+          color: '#78350f'
         }}>
           语境记忆 - 登录
         </h1>
@@ -77,9 +78,10 @@ export default function Login() {
               style={{
                 width: '100%',
                 padding: '8px 12px',
-                border: '1px solid #d9d9d9',
-                borderRadius: '4px',
-                fontSize: '14px'
+                border: '1px solid #fcd34d',
+                borderRadius: '8px',
+                fontSize: '14px',
+                backgroundColor: '#fffbeb'
               }}
             />
           </div>
@@ -102,9 +104,10 @@ export default function Login() {
               style={{
                 width: '100%',
                 padding: '8px 12px',
-                border: '1px solid #d9d9d9',
-                borderRadius: '4px',
-                fontSize: '14px'
+                border: '1px solid #fcd34d',
+                borderRadius: '8px',
+                fontSize: '14px',
+                backgroundColor: '#fffbeb'
               }}
             />
           </div>
@@ -130,10 +133,10 @@ export default function Login() {
             style={{
               width: '100%',
               padding: '10px',
-              backgroundColor: isLoading ? '#d9d9d9' : '#1890ff',
+              backgroundColor: isLoading ? '#d9d9d9' : '#d97706',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '8px',
               fontSize: '16px',
               fontWeight: '500',
               cursor: isLoading ? 'not-allowed' : 'pointer'
@@ -153,7 +156,7 @@ export default function Login() {
           <a
             href="/register"
             style={{
-              color: '#1890ff',
+              color: '#d97706',
               marginLeft: '4px',
               textDecoration: 'none'
             }}

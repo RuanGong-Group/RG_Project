@@ -10,6 +10,10 @@ export default function DailyGoalCard({ plan }: DailyGoalCardProps) {
   const progressPercent = plan.dailyGoal > 0
     ? Math.round((totalCompleted / plan.dailyGoal) * 100)
     : 0;
+  
+  // 判断是否超额完成
+  const isOverAchieved = totalCompleted > plan.dailyGoal;
+  const isCompleted = totalCompleted >= plan.dailyGoal;
 
   return (
     <div style={{
@@ -29,8 +33,13 @@ export default function DailyGoalCard({ plan }: DailyGoalCardProps) {
           marginBottom: '8px',
           fontSize: '14px'
         }}>
-          <span>已完成 {totalCompleted} / {plan.dailyGoal} 个单词</span>
-          <span>{progressPercent}%</span>
+          <span>
+            已完成 {totalCompleted} / {plan.dailyGoal} 个单词
+            {isOverAchieved && <span style={{ marginLeft: '8px', color: '#faad14', fontWeight: 'bold' }}>🎉 超额完成！</span>}
+          </span>
+          <span style={{ color: isOverAchieved ? '#faad14' : '#666', fontWeight: isOverAchieved ? 'bold' : 'normal' }}>
+            {isOverAchieved ? `${progressPercent}% ⭐` : `${progressPercent}%`}
+          </span>
         </div>
         <div style={{
           height: '8px',
@@ -41,7 +50,7 @@ export default function DailyGoalCard({ plan }: DailyGoalCardProps) {
         <div style={{
           width: `${Math.min(progressPercent, 100)}%`,
           height: '100%',
-          backgroundColor: progressPercent >= 100 ? '#B8935F' : '#D4A574',
+          backgroundColor: isOverAchieved ? '#faad14' : (isCompleted ? '#B8935F' : '#D4A574'),
           transition: 'width 0.3s'
         }} />
       </div>

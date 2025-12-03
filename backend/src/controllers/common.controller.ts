@@ -8,6 +8,7 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import prisma from '../utils/prisma';
 import { getBeijingTime } from '../utils/datetime';
 import { getTodayLearnedNewWords as getTodayLearnedNewWordsService } from '../services/learning.service';
+import { getOrCreateSalt, applyStableShuffle } from '../utils/shuffle';
 
 /**
  * 获取今日已学习的新单词
@@ -138,14 +139,29 @@ export const getTodayPlan = async (
       distinct: ['meaningId']
     })).map(p => p.meaning.wordId));
 
-    const newWordsAvailable = allWordIdsInBook.filter(id => !learnedWordIds.has(id));
-    const newWordsToShow = await prisma.word.findMany({
-      where: { id: { in: newWordsAvailable.slice(0, 10) } },
+    let newWordsAvailable = allWordIdsInBook.filter(id => !learnedWordIds.has(id));
+
+    // 应用稳定乱序 (Stable Shuffle)
+    // 确保用户看到的单词顺序是固定的，但又是随机的
+    const salt = await getOrCreateSalt(userId, user.currentBookTagId);
+    newWordsAvailable = applyStableShuffle(newWordsAvailable, userId, salt);
+
+    // 取前10个
+    const targetIds = newWordsAvailable.slice(0, 10);
+
+    const newWordsData = await prisma.word.findMany({
+      where: { id: { in: targetIds } },
       select: { id: true, word: true, _count: { select: { meanings: true } } }
     });
 
+    // 重新排序以匹配 targetIds 的顺序 (因为 findMany 不保证顺序)
+    const newWordsToShow = targetIds
+      .map(id => newWordsData.find(w => w.id === id))
+      .filter((w): w is NonNullable<typeof w> => !!w);
+
     const dailyGoal = user.dailyLearningGoal || 20;
-    const newLearningQuota = Math.max(0, dailyGoal - learnedWordsToday.size);
+    // 新学配额 = 目标 - 到期复习单词数 - 已完成新学单词数
+    const newLearningQuota = Math.max(0, dailyGoal - reviewWords.length - learnedWordsToday.size);
 
     res.json({
       success: true,

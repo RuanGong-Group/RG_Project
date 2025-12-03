@@ -6,6 +6,7 @@ import prisma from '../utils/prisma';
 import * as SessionService from '../services/session.service';
 import { updateTodayCheckIn } from './checkin.controller';
 import { getBeijingToday } from '../utils/datetime';
+import { normalizePronunciation } from '../utils/text';
 
 // 重构后的 Controller 层：仅负责处理 HTTP 请求/响应，业务逻辑移至 SessionService
 
@@ -129,7 +130,7 @@ export const startSession = async (req: AuthRequest, res: Response) => {
                 id: session.currentWord.wordId,
                 word: session.currentWord.word, // 前端不显示,仅用于验证
                 lemma: session.currentWord.lemma,
-                pronunciations: session.currentWord.pronunciations
+                pronunciations: normalizePronunciation(session.currentWord.pronunciations)
               },
               meaningId: currentMeaning.meaningId,
               definition: currentMeaning.definition,
@@ -161,7 +162,7 @@ export const startSession = async (req: AuthRequest, res: Response) => {
                 id: session.currentWord.wordId,
                 word: session.currentWord.word,
                 lemma: session.currentWord.lemma,
-                pronunciations: session.currentWord.pronunciations
+                pronunciations: normalizePronunciation(session.currentWord.pronunciations)
               },
               meaningId: currentMeaning.meaningId,
               sentence,
@@ -193,7 +194,7 @@ export const startSession = async (req: AuthRequest, res: Response) => {
             id: session.currentWord.wordId, 
             word: session.currentWord.word, 
             lemma: session.currentWord.lemma,
-            pronunciations: session.currentWord.pronunciations 
+            pronunciations: normalizePronunciation(session.currentWord.pronunciations) 
           }, 
           meaningId: currentMeaning.meaningId, 
           sentence,
@@ -264,13 +265,6 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
           sentence: String(rel.example.sentence || ''),
           translation: rel.example.translation 
         }));
-        const parsePronunciations = (p: any) => {
-          if (!p) return { uk: '', us: '' };
-          if (typeof p === 'string') {
-            try { return JSON.parse(p); } catch (e) { return { uk: '', us: '' }; }
-          }
-          return p || { uk: '', us: '' };
-        };
         
         // 路径C：标记当前词义已学完
         session.currentWord.meanings[currentMeaningIndex].learned = true;
@@ -296,7 +290,7 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
                 id: session.currentWord.wordId,
                 word: session.currentWord.word,
                 lemma: session.currentWord.lemma,
-                pronunciations: session.currentWord.pronunciations
+                pronunciations: normalizePronunciation(session.currentWord.pronunciations)
               },
               sentence: exampleSentences[0]?.sentence || '', // 添加例句用于固定上下文
               translation: exampleSentences[0]?.translation || '',
@@ -304,7 +298,7 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
               card: { 
                 definition: m.definition, 
                 partOfSpeech: m.partOfSpeech, 
-                pronunciations: parsePronunciations(m.word.pronunciation), 
+                pronunciations: normalizePronunciation(m.word.pronunciation), 
                 examples: exampleSentences 
               },
               wordProgress: {
@@ -320,14 +314,7 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
       
       // 路径 A/B：返回选择题（附带句子信息用于前端回顾）
       const q = await SessionService.makeQuestionForMeaning(currentMeaning.meaningId);
-      const parsePronunciations = (p: any) => {
-        if (!p) return { uk: '', us: '' };
-        if (typeof p === 'string') {
-          try { return JSON.parse(p); } catch (e) { return { uk: '', us: '' }; }
-        }
-        return p || { uk: '', us: '' };
-      };
-      
+
       // Handle legacy string examples or new object examples
       const exObj = currentMeaning.examples[0];
       const sentence = getSafeSentence(exObj);
@@ -350,7 +337,7 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
             word: {
               word: session.currentWord.word,
               lemma: session.currentWord.lemma,
-              pronunciations: session.currentWord.pronunciations
+              pronunciations: normalizePronunciation(session.currentWord.pronunciations)
             },
             wordProgress: {
               currentMeaning: currentMeaningIndex + 1,
@@ -425,7 +412,8 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
       try {
         await recordLearningResult(session.userId, meaningId, !!isCorrect);
         if (isCorrect) {
-          await updateTodayCheckIn(session.userId, 'learn-meaning');
+          const meaningCheckInType = session.mode === 'review-only' ? 'review-meaning' : 'learn-meaning';
+          await updateTodayCheckIn(session.userId, meaningCheckInType);
         }
       } catch (err) {
         console.error('Failed to persist learning result:', err);
@@ -433,13 +421,6 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
       
       // === Booster 专用逻辑 ===
       if (isBooster) {
-        const parsePronunciations = (p: any) => {
-          if (!p) return { uk: '', us: '' };
-          if (typeof p === 'string') {
-            try { return JSON.parse(p); } catch (e) { return { uk: '', us: '' }; }
-          }
-          return p || { uk: '', us: '' };
-        };
         const exampleSentences = m.examples.map((rel, i) => ({ 
           id: i + 1, 
           sentence: String(rel.example.sentence || ''),
@@ -447,7 +428,7 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
         }));
         const cardData = {
           word: m.word.word,
-          pronunciations: parsePronunciations(m.word.pronunciation),
+          pronunciations: normalizePronunciation(m.word.pronunciation),
           definition: m.definition,
           partOfSpeech: m.partOfSpeech,
           examples: exampleSentences
@@ -506,13 +487,6 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
         }
       }
 
-      const parsePronunciations = (p: any) => {
-        if (!p) return { uk: '', us: '' };
-        if (typeof p === 'string') {
-          try { return JSON.parse(p); } catch (e) { return { uk: '', us: '' }; }
-        }
-        return p || { uk: '', us: '' };
-      };
       const exampleSentences = m.examples.map((rel, i) => ({ 
         id: i + 1, 
         sentence: String(rel.example.sentence || ''),
@@ -520,7 +494,7 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
       }));
       const cardData = {
         word: m.word.word,
-        pronunciations: parsePronunciations(m.word.pronunciation),
+        pronunciations: normalizePronunciation(m.word.pronunciation),
         definition: m.definition,
         partOfSpeech: m.partOfSpeech,
         examples: exampleSentences
@@ -613,19 +587,12 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
       try {
         await recordLearningResult(session.userId, meaningId, !!isCorrect);
         if (isCorrect) {
-          await updateTodayCheckIn(session.userId, 'learn-meaning');
+          const meaningCheckInType = session.mode === 'review-only' ? 'review-meaning' : 'learn-meaning';
+          await updateTodayCheckIn(session.userId, meaningCheckInType);
         }
       } catch (err) {
         console.error('Failed to persist spelling result:', err);
       }
-      
-      const parsePronunciations = (p: any) => {
-        if (!p) return { uk: '', us: '' };
-        if (typeof p === 'string') {
-          try { return JSON.parse(p); } catch (e) { return { uk: '', us: '' }; }
-        }
-        return p || { uk: '', us: '' };
-      };
       
       const exampleSentences = m.examples.map((rel, i) => ({ 
         id: i + 1, 
@@ -634,7 +601,7 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
       }));
       const cardData = {
         word: m.word.word,
-        pronunciations: parsePronunciations(m.word.pronunciation),
+        pronunciations: normalizePronunciation(m.word.pronunciation),
         definition: m.definition,
         partOfSpeech: m.partOfSpeech,
         examples: exampleSentences,
@@ -704,19 +671,11 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
             }
           });
           
-          const parsePronunciations = (p: any) => {
-            if (!p) return { uk: '', us: '' };
-            if (typeof p === 'string') {
-              try { return JSON.parse(p); } catch (e) { return { uk: '', us: '' }; }
-            }
-            return p || { uk: '', us: '' };
-          };
-          
           const sentence = meaningData?.examples[0]?.example.sentence || '';
           const wordInfo = meaningData ? {
             word: meaningData.word.word,
             lemma: meaningData.word.word,
-            pronunciations: parsePronunciations(meaningData.word.pronunciation)
+            pronunciations: normalizePronunciation(meaningData.word.pronunciation)
           } : null;
           
           // 重要：设置 currentWord 为 Booster 词义所属的单词（仅包含该词义）
@@ -725,7 +684,7 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
               wordId: meaningData.word.id,
               word: meaningData.word.word,
               lemma: meaningData.word.word,
-              pronunciations: parsePronunciations(meaningData.word.pronunciation),
+              pronunciations: normalizePronunciation(meaningData.word.pronunciation),
               meanings: [{
                 meaningId: meaningData.id,
                 partOfSpeech: meaningData.partOfSpeech || '',
@@ -820,19 +779,11 @@ export const getNextQuestions = async (req: AuthRequest, res: Response) => {
           }
         });
         
-        const parsePronunciations = (p: any) => {
-          if (!p) return { uk: '', us: '' };
-          if (typeof p === 'string') {
-            try { return JSON.parse(p); } catch (e) { return { uk: '', us: '' }; }
-          }
-          return p || { uk: '', us: '' };
-        };
-        
         const sentence = meaningData?.examples[0]?.example.sentence || '';
         const wordInfo = meaningData ? {
           word: meaningData.word.word,
           lemma: meaningData.word.word,
-          pronunciations: parsePronunciations(meaningData.word.pronunciation)
+          pronunciations: normalizePronunciation(meaningData.word.pronunciation)
         } : null;
         
         // 重要：设置 currentWord 为 Booster 词义所属的单词（仅包含该词义）
@@ -841,7 +792,7 @@ export const getNextQuestions = async (req: AuthRequest, res: Response) => {
             wordId: meaningData.word.id,
             word: meaningData.word.word,
             lemma: meaningData.word.word,
-            pronunciations: parsePronunciations(meaningData.word.pronunciation),
+            pronunciations: normalizePronunciation(meaningData.word.pronunciation),
             meanings: [{
               meaningId: meaningData.id,
               partOfSpeech: meaningData.partOfSpeech || '',
@@ -939,8 +890,10 @@ export const getNextQuestions = async (req: AuthRequest, res: Response) => {
       session.learned.add(wordKey);
       
       // 更新今日打卡记录（单词级别）
+      // 根据模式区分新学和复习
       try {
-        await updateTodayCheckIn(session.userId, 'learn');
+        const checkInType = session.mode === 'review-only' ? 'review' : 'learn';
+        await updateTodayCheckIn(session.userId, checkInType);
       } catch (err) {
         console.error('Failed to update checkin:', err);
       }
@@ -949,7 +902,7 @@ export const getNextQuestions = async (req: AuthRequest, res: Response) => {
         wordId: session.currentWord.wordId,
         word: session.currentWord.word,
         lemma: session.currentWord.lemma,
-        pronunciations: session.currentWord.pronunciations,
+        pronunciations: normalizePronunciation(session.currentWord.pronunciations),
         meanings: session.currentWord.meanings.map((m: any) => ({
           meaningId: m.meaningId,
           partOfSpeech: m.partOfSpeech,
@@ -1004,7 +957,7 @@ export const getNextQuestions = async (req: AuthRequest, res: Response) => {
                 id: session.currentWord.wordId,
                 word: session.currentWord.word,
                 lemma: session.currentWord.lemma,
-                pronunciations: session.currentWord.pronunciations
+                pronunciations: normalizePronunciation(session.currentWord.pronunciations)
               },
               meaningId: nextMeaning.meaningId,
               definition: nextMeaning.definition,
@@ -1029,7 +982,7 @@ export const getNextQuestions = async (req: AuthRequest, res: Response) => {
                 id: session.currentWord.wordId,
                 word: session.currentWord.word,
                 lemma: session.currentWord.lemma,
-                pronunciations: session.currentWord.pronunciations
+                pronunciations: normalizePronunciation(session.currentWord.pronunciations)
               },
               meaningId: nextMeaning.meaningId,
               sentence,
@@ -1053,7 +1006,7 @@ export const getNextQuestions = async (req: AuthRequest, res: Response) => {
               id: session.currentWord.wordId,
               word: session.currentWord.word,
               lemma: session.currentWord.lemma,
-              pronunciations: session.currentWord.pronunciations
+              pronunciations: normalizePronunciation(session.currentWord.pronunciations)
             },
             meaningId: nextMeaning.meaningId,
             sentence,

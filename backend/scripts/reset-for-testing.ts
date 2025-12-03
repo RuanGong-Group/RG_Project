@@ -22,18 +22,39 @@ async function resetProgressOnly() {
   console.log('🔄 重置学习进度（保留单词数据）...\n');
   
   try {
-    // 只删除学习记录
+    // 1. 删除学习记录
     const progress = await prisma.userLearningProgress.deleteMany({});
     console.log(`✅ 已清除 ${progress.count} 条学习进度`);
     
-    // 重置用户的 currentBookTagId（如果需要）
+    // 2. 删除每日打卡记录
+    const checkIns = await prisma.dailyCheckIn.deleteMany({});
+    console.log(`✅ 已清除 ${checkIns.count} 条每日打卡记录`);
+    
+    // 3. 删除生词本
+    const notebook = await prisma.userWordNotebook.deleteMany({});
+    console.log(`✅ 已清除 ${notebook.count} 条生词本记录`);
+    
+    // 4. 删除词书乱序Salt（可选，会导致单词顺序重新乱序）
+    const bookSettings = await prisma.userBookSettings.deleteMany({});
+    console.log(`✅ 已清除 ${bookSettings.count} 条词书乱序设置`);
+    
+    // 5. 删除用户成就
+    const achievements = await prisma.userAchievement.deleteMany({});
+    console.log(`✅ 已清除 ${achievements.count} 条用户成就`);
+    
+    // 6. 删除视频生成任务
+    const videos = await prisma.videoGenerationJob.deleteMany({});
+    console.log(`✅ 已清除 ${videos.count} 条视频生成任务`);
+    
+    // 7. 重置用户的当前词书选择
     const users = await prisma.user.updateMany({
       data: { currentBookTagId: null }
     });
     console.log(`✅ 已重置 ${users.count} 个用户的当前词书`);
     
-    console.log('\n🎉 学习进度已重置！单词数据保持不变。');
+    console.log('\n🎉 学习进度已完全重置！单词数据保持不变。');
     console.log('💡 你可以继续使用现有单词进行测试。');
+    console.log('📝 注意：词书乱序已重置，下次学习时单词顺序会重新生成。');
     
   } catch (err) {
     console.error('❌ 重置失败：', err);

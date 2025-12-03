@@ -39,9 +39,9 @@ export default function Stats() {
   // 加载中
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-amber-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600 mb-4"></div>
           <p className="text-gray-600">加载统计数据中...</p>
         </div>
       </div>
@@ -51,14 +51,14 @@ export default function Stats() {
   // 错误状态
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
           <div className="text-6xl mb-4">⚠️</div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">加载失败</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <button
             onClick={loadStatsData}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
+            className="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
           >
             重试
           </button>
@@ -70,14 +70,14 @@ export default function Stats() {
   // 空数据状态 - 必须在使用 overview 之前检查
   if (!overview || !overview.masteryDistribution) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
           <div className="text-6xl mb-4">📊</div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">还没有学习数据</h2>
           <p className="text-gray-600 mb-6">开始学习吧，积累学习数据后可以在这里查看统计信息！</p>
           <button
             onClick={handleBack}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
+            className="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
           >
             返回学习计划
           </button>
@@ -97,18 +97,18 @@ export default function Stats() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-amber-50 p-4">
       <div className="max-w-4xl mx-auto">
         {/* 顶部导航 */}
         <div className="flex items-center justify-between mb-6">
           <button
             onClick={handleBack}
-            className="flex items-center text-gray-600 hover:text-gray-900"
+            className="flex items-center text-amber-700 hover:text-amber-900"
           >
             <span className="mr-2">←</span>
             返回
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">📊 学习统计</h1>
+          <h1 className="text-2xl font-bold text-amber-900">📊 学习统计</h1>
           <div className="w-16"></div> {/* 占位符保持标题居中 */}
         </div>
 

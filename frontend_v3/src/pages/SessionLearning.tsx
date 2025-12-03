@@ -300,7 +300,7 @@ export default function SessionLearning() {
     }
 
     if (t === 'session-complete') {
-      return <SessionComplete />;
+      return <SessionComplete sessionMode={sessionMode} />;
     }
 
     return <div className="text-center text-gray-500">未知的会话状态: {t}</div>;

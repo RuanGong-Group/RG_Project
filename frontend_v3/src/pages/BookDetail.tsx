@@ -97,9 +97,9 @@ export default function BookDetail() {
     word.word.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
-  // 统计数据
+  // 统计数据（注意：这里统计的是当前加载的单词，不是全局统计）
   const stats = bookData ? {
-    total: bookData.total,
+    total: bookData.words.length,  // 修复：使用已加载的单词数量，而不是整个词书的总数
     learned: bookData.words.filter(w => w.isLearned).length,
     due: bookData.words.filter(w => w.isDue).length,
     new: bookData.words.filter(w => !w.isLearned).length
@@ -155,11 +155,11 @@ export default function BookDetail() {
         {/* 学习统计 */}
         {stats && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold mb-4">📊 学习统计</h2>
+            <h2 className="text-lg font-semibold mb-4">📊 当前页面统计 (已加载 {stats.total} 个单词)</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-4 bg-blue-50 rounded-lg">
-                <div className="text-3xl font-bold text-blue-600">{stats.total}</div>
-                <div className="text-sm text-gray-600 mt-1">单词总数</div>
+                <div className="text-3xl font-bold text-blue-600">{bookData.total}</div>
+                <div className="text-sm text-gray-600 mt-1">词书总数</div>
               </div>
               <div className="text-center p-4 bg-green-50 rounded-lg">
                 <div className="text-3xl font-bold text-green-600">{stats.learned}</div>
@@ -175,18 +175,18 @@ export default function BookDetail() {
               </div>
             </div>
             
-            {/* 进度条 */}
+            {/* 进度条 - 使用词书总数计算 */}
             <div className="mt-4">
               <div className="flex items-center justify-between text-sm mb-2">
-                <span className="text-gray-600">学习进度</span>
+                <span className="text-gray-600">词书总进度</span>
                 <span className="font-semibold">
-                  {stats.learned}/{stats.total} ({Math.round(stats.learned / stats.total * 100)}%)
+                  {stats.learned}/{bookData.total} ({Math.round(stats.learned / bookData.total * 100)}%)
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
                   className="bg-green-500 h-3 rounded-full transition-all"
-                  style={{ width: `${stats.learned / stats.total * 100}%` }}
+                  style={{ width: `${Math.min(100, stats.learned / bookData.total * 100)}%` }}
                 ></div>
               </div>
             </div>

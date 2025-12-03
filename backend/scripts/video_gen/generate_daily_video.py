@@ -31,9 +31,24 @@ backend_dir = os.path.dirname(os.path.dirname(current_dir))
 env_path = os.path.join(backend_dir, '.env')
 load_dotenv(env_path)
 
+# LLM (SiliconFlow) keys
 API_KEY = os.getenv("SILICONFLOW_API_KEY") or os.getenv("AI_API_KEY")
+# DeepSeek model id on SiliconFlow (configurable)
+DEEPSEEK_MODEL_ID = os.getenv("DEEPSEEK_MODEL_ID", "deepseek-ai/DeepSeek-V3")
+
+# Doubao (Volcengine) Image API config
+DOUBAO_API_KEY = os.getenv("DOUBAO_API_KEY")
+DOUBAO_API_BASE = os.getenv("DOUBAO_API_BASE", "https://ark.cn-beijing.volces.com/api/v3")
+DOUBAO_IMAGE_MODEL = os.getenv("DOUBAO_IMAGE_MODEL", "doubao-seedream-4-0-250828")
+DOUBAO_IMAGE_STYLE = os.getenv("DOUBAO_IMAGE_STYLE", "comic")  # comic | realistic
+
+# 验证必需的 API Keys
 if not API_KEY:
     print(json.dumps({"status": "error", "message": "SILICONFLOW_API_KEY or AI_API_KEY not found in .env file"}))
+    sys.exit(1)
+
+if not DOUBAO_API_KEY:
+    print(json.dumps({"status": "error", "message": "DOUBAO_API_KEY not found in .env file"}))
     sys.exit(1)
 
 # 配置存储路径
@@ -69,144 +84,76 @@ def log_progress(status, progress, message=None, data=None):
     print(json.dumps(log_entry), flush=True)
 
 async def generate_script(word_data):
-    """使用 LLM 生成包含单词的短故事和分镜描述"""
+    """使用 DeepSeek 生成高质量脚本与图像描述"""
     words_str = ", ".join([f"{w['word']} ({w['meaning']})" for w in word_data])
     log_progress("generating_script", 10, f"Generating script for words: {words_str}")
-    
-    prompt = f"""
-    You are a creative storyteller writing simple, engaging picture-book stories for vocabulary learning.
-    Like a third-grader's "look at pictures and write" exercise, but here you "look at words and write a story."
-    
-    ═══════════════════════════════════════════════════════════════
-    📝 YOUR TASK: Create a SMOOTH, FLOWING story (4-6 scenes) that teaches these vocabulary words:
-    
-    {words_str}
-    
-    ⚠️ CRITICAL: 
-    - You MUST use ALL the words listed above in your story (these are today's learning words)
-    - You CAN use other common words to build the story naturally (articles, verbs, adjectives, etc.)
-    - The example words in the instructions below (FOOD_ITEM, COLOR_ADJ, etc.) are just PLACEHOLDERS for teaching purposes
-    - Do NOT treat example placeholder words as today's learning words
-    - Build your story around the actual words listed above: {words_str}
-    ═══════════════════════════════════════════════════════════════
-    
-    STEP 1 - Find the "Anchor Word" (MOST IMPORTANT):
-    - Identify the most CONCRETE, SPECIFIC noun in YOUR word list
-    - Concrete nouns: 物体 (WORD_A, WORD_B, WORD_C), 地点 (PLACE_X, PLACE_Y), 动物 (ANIMAL_1, ANIMAL_2)
-    - Abstract words: 形容词/副词 (ADJ_1, ADV_1, ADJ_2), 概念 (CONCEPT_A, CONCEPT_B)
-    - The ANCHOR WORD determines the scene - other words fill in details
-    
-    Example Logic (with placeholder words):
-    - If your list has: [CONCRETE_NOUN, ADJ_1, ADJ_2, VERB_1] → Anchor: CONCRETE_NOUN → Scene built around it
-    - If your list has: [PLACE_NAME, ACTION_1, ADJ_1, ADJ_2] → Anchor: PLACE_NAME → Scene at that location
-    - If your list has: [ADJ_1, VERB_1, ADJ_2, NOUN_1] → Anchor: NOUN_1 (most specific object)
-    
-    STEP 2 - Build Theme Around Anchor:
-    - If anchor is a FOOD → Theme: Cooking, Gardening, or Market
-    - If anchor is a PLACE → Theme: Activities at that location
-    - If anchor is an ANIMAL → Theme: Nature, Farm, or Pet care
-    - If anchor is a TOOL/OBJECT → Theme: Using that object
-    - Let the anchor word naturally guide ALL other words into the story
-    
-    STEP 3 - Pick Story Genre:
-    - 🌱 Nature: gardening, outdoor activities, animals (peaceful, educational)
-    - 🎨 Daily Life: cooking, hobbies, family time, shopping, crafts
-    - 🌍 Travel/Adventure: exploring new places, discovering things (bright, fun, NOT dangerous)
-    - 📚 School Life: students learning, studying, making friends
-    - ✨ Fairy Tale: magical but gentle stories (kind wizards, helpful animals, NOT scary)
-    
-    CRITICAL Rules:
-    
-    1. Story MUST Flow Naturally:
-       - Think: "What happens next?" after each scene
-       - Each scene connects to the previous one through action, location, or time
-       - Use transition words/ideas: "Then...", "After that...", "Meanwhile...", "Later..."
-       - Example flow: "Character enters location → Character does action → Character experiences result → Character completes task → Happy ending"
-       - Use emotional/time transitions: "Feeling happy, she...", "After finishing, he...", "Later that day..."
-       - NOT abrupt jumps: "Student studies → (suddenly) Having lunch" (Missing: what triggered the transition?)
-    
-    2. Use ALL Words Naturally:
-       - MUST use every single word from TODAY'S LIST: {words_str}
-       - You can use other common words (the, a, was, walked, beautiful, etc.) to make the story flow naturally
-       - The chosen theme should make today's vocabulary words fit naturally into the story
-       - If a word feels forced, reconsider your theme choice
-       - Think: "Does this word belong in this setting?" If yes, the theme is right
-       - Choose scenes where today's vocabulary words naturally appear together
-    
-    3. Appropriate Content:
-       - YES: Bright, warm, positive, educational, gentle, encouraging
-       - NO: Dark, scary, violent, tense, mysterious, negative
-       - If fantasy: use kind magic, helpful creatures, happy endings
-       - Keep it safe and uplifting for all ages
-    
-    4. Visual Style:
-       - Consistent main character throughout (describe appearance once)
-       - Similar time of day and lighting (don't jump from day to night)
-       - Connected locations (e.g., kitchen → dining room OK; kitchen → jungle NOT OK)
-       - ALWAYS specify: "bright lighting, warm atmosphere, photorealistic, 4k"
-    
-    5. Sentence Structure:
-       - Simple, clear sentences (8-15 words)
-       - One main idea per sentence
-       - Can combine two related ideas with connecting words
-       - Like reading a picture book: short, vivid, concrete descriptions
-       - Use emotional/time transitions to connect scenes: "Feeling happy, she...", "After finishing, he...", "Later that day..."
-    
-    6. Output Format:
-       - "text": One clear English sentence per scene
-       - "translation": Natural Chinese translation (use 。！？ for sentence endings)
-    
-    ═══════════════════════════════════════════════════════════════
-    Example - The Power of Anchor Words (DEMONSTRATION ONLY - NOT your actual task):
-    
-    Suppose you received: [FOOD_ITEM, COLOR_ADJ, DIRECTION_ADV, ABSTRACT_NOUN_1, ABSTRACT_NOUN_2, QUALITY_NOUN]
-    
-    Step 1 - Find Anchor:
-    - FOOD_ITEM = CONCRETE OBJECT (食物/植物) ✅ ANCHOR
-    - COLOR_ADJ, DIRECTION_ADV, ABSTRACT_NOUN_1, ABSTRACT_NOUN_2, QUALITY_NOUN = ABSTRACT
-    
-    Step 2 - Build Theme:
-    - FOOD_ITEM → Gardening or Cooking
-    - Choose: Gardening
-    
-    ✅ EXCELLENT Story (Anchor-driven):
-    Scene 1: "Character walked into garden, excited to check FOOD_ITEM plants."
-    Scene 2: "A COLOR_ADJ creature appeared, ABSTRACT_NOUN_1 that season arrived."
-    Scene 3: "The creature moved DIRECTION_ADV across the garden."
-    Scene 4: "Despite ABSTRACT_NOUN_2, the plants had one QUALITY_NOUN: perfection."
-    Scene 5: "Character picked a FOOD_ITEM, proud of success."
-    
-    Why this works: Concrete anchor guides theme, abstract words support naturally.
-    
-    ❌ WEAK Story (Ignoring anchor):
-    Scene 1: "Character studied with COLOR_ADJ notebook."
-    Scene 2: "Faced ABSTRACT_NOUN_2 with problem."
-    ...
-    Scene 5: "At lunch, ate FOOD_ITEM." (forced, disconnected)
-    
-    Why this fails: Ignored concrete anchor, forced it in later.
-    
-    🎯 Key Principle: CONCRETE NOUNS > ABSTRACT WORDS
-    Let specific objects guide the scene, let abstract words fill the details.
-    ═══════════════════════════════════════════════════════════════
-    
-    ⚠️ FINAL REMINDER: 
-    - The example above uses PLACEHOLDER words (FOOD_ITEM, COLOR_ADJ, etc.) for TEACHING purposes only
-    - Your actual task is to create a story featuring TODAY'S VOCABULARY: {words_str}
-    - Use other common English words freely to build natural, flowing sentences
-    - The goal: Make today's vocabulary words shine in a coherent, engaging story
-    
-    JSON Output:
-    {{
-        "scenes": [
-            {{
-                "text": "Simple sentence with natural word usage.",
-                "translation": "简单自然的中文翻译。",
-                "image_prompt": "Character doing action in setting, bright natural lighting, warm atmosphere, photorealistic, 4k"
+
+    # System role to constrain style and quality
+    system_msg = (
+        "You are a senior children's picture-book writer. "
+        "Write bright, warm, realistic daily-life/nature/school stories. "
+        "Ensure smooth scene transitions and natural usage of all provided vocabulary. "
+        "Provide per-scene Chinese translation and an image description (subject + action + setting + lighting + mood + time + camera). "
+        "Avoid dark, horror, surreal, distorted content."
+    )
+
+    user_msg = f"""
+        TASK OVERVIEW:
+        Produce EXACT JSON for a children's picture-book sequence (4–6 scenes) with ONE immutable main character and FULL vocabulary coverage.
+
+        STRICT OUTPUT RULES:
+        - Return ONLY JSON (no comments/markdown/code fences). Field order fixed.
+        - No extra fields; no null; no trailing commas; plain UTF-8 text.
+
+        CHARACTER DESIGN (IMMUTABLE):
+        - ≤45 English words describing age, gender, hair style & color, eye color, clothing (single outfit), ONE distinctive accessory (optional).
+        - MUST remain unchanged across all scenes. Do NOT alter outfit or features.
+        - No magical/surreal traits; suitable for children.
+
+        ANCHOR WORD:
+        - Pick the most concrete word from TODAY'S VOCABULARY as story core.
+        - For each selected vocabulary word, you MAY freely choose the most natural part-of-speech and sense (meaning) to fit the scene.
+            Do NOT force a single fixed meaning; prioritize natural, coherent usage.
+
+        SCENE RULES:
+        - Exactly 4–6 scenes.
+        - Each scene has ONE English sentence (8–15 words), no semicolons/quotes/ellipses, not starting with And/But.
+        - Each sentence MUST naturally use ≥1 vocabulary word.
+        - Use transitions across scenes: Then / After that / Meanwhile / Later that day.
+
+        IMAGE DESCRIPTIONS (FOR GENERATION):
+        - Short comma-separated phrase with FIXED order:
+            action, setting, lighting (consistent), mood, camera (choose one of: wide establishing | mid-shot | close-up | over-shoulder)
+        - DO NOT include character appearance (it is defined in character_design).
+        - Keep time-of-day and location consistent across all scenes.
+
+        COVERAGE & VALIDATION:
+        - used_words MUST be a subset of TODAY'S VOCABULARY; no invented words.
+        - coverage.missing_words MUST be [] before returning. If not empty, internally rewrite scenes to achieve full coverage, then return.
+
+        TODAY'S VOCABULARY:
+        {words_str}
+
+        JSON OUTPUT FORMAT (strict, field order):
+        {{
+            "character_design": "...",
+            "anchor_word": "...",
+            "theme": "≤8 words summary capturing moral or focus",
+            "scenes": [
+                {{
+                    "text": "...",
+                    "translation": "...",
+                    "image_desc": "action, setting, lighting, mood, camera",
+                    "used_words": ["..."]
+                }}
+            ],
+            "coverage": {{
+                "total_words": {len(word_data)},
+                "covered_words": ["..."],
+                "missing_words": []
             }}
-        ]
-    }}
-    """
+        }}
+        """
 
     url = "https://api.siliconflow.cn/v1/chat/completions"
     headers = {
@@ -214,8 +161,11 @@ async def generate_script(word_data):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "Qwen/Qwen2.5-7B-Instruct",
-        "messages": [{"role": "user", "content": prompt}],
+        "model": DEEPSEEK_MODEL_ID,
+        "messages": [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg}
+        ],
         "temperature": 0.7,
         "response_format": {"type": "json_object"}
     }
@@ -226,9 +176,20 @@ async def generate_script(word_data):
         result = response.json()
         content = result['choices'][0]['message']['content'].strip()
         parsed = json.loads(content)
+
+        # Coverage check: ensure no missing words
+        missing = parsed.get('coverage', {}).get('missing_words', [])
+        scenes = parsed.get('scenes', [])
+        character_design = parsed.get('character_design', '')
         
-        log_progress("script_generated", 20, f"Script generated: {len(parsed['scenes'])} scenes.")
-        return parsed['scenes']
+        if missing:
+            log_progress("generating_script", 15, f"Missing words in coverage: {missing}. Proceeding but may retry in future.")
+        
+        if not character_design:
+            log_progress("warning", 15, "No character_design found in DeepSeek response. Image consistency may suffer.")
+
+        log_progress("script_generated", 20, f"Script generated: {len(scenes)} scenes, character: {character_design[:50]}...")
+        return parsed  # 返回完整的 parsed 对象(包含 character_design)
     except Exception as e:
         log_progress("error", 0, f"Error generating script: {e}")
         return None
@@ -264,40 +225,197 @@ async def generate_audio(text, output_filename):
             print(f"❌ pyttsx3 failed: {e2}", file=sys.stderr)
             return None
 
-def generate_image(prompt, output_filename):
-    """使用 Flux.1 生成配图"""
-    # log_progress("generating_image", 0, "Generating image...") # Avoid spamming logs
+def generate_image(image_desc, output_filename):
+    """单张图片生成(用于组图不足的降级补齐)"""
     output_path = os.path.join(DIRS["image"], output_filename)
-    
-    # 修复: 移除 "anatomically correct" 避免生成恐怖图片
-    # 添加更明确的正向提示词确保图片温暖、友好、适合学习
-    enhanced_prompt = f"bright sunny day, warm colors, friendly atmosphere, happy scene, {prompt}, educational children's book illustration style, colorful, cheerful, safe for all ages, high quality"
 
-    url = "https://api.siliconflow.cn/v1/images/generations"
+    if not (DOUBAO_API_KEY and DOUBAO_API_BASE and DOUBAO_IMAGE_MODEL):
+        print("❌ Doubao API not configured.", file=sys.stderr)
+        return None
+
+    # 简洁风格后缀，避免提示过长
+    if DOUBAO_IMAGE_STYLE == "comic":
+        style_suffix = "warm picture-book illustration, clean background, gentle warm palette"
+    else:
+        style_suffix = "warm realistic photo style, natural lighting, clean composition"
+
+    final_prompt = f"{image_desc}, {style_suffix}"
+    words = final_prompt.split()
+    if len(words) > 600:
+        final_prompt = " ".join(words[:600])
+
+    url = f"{DOUBAO_API_BASE}/images/generations"
     headers = {
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {DOUBAO_API_KEY}",
         "Content-Type": "application/json"
     }
-    data = {
-        "model": "black-forest-labs/FLUX.1-schnell", 
-        "prompt": enhanced_prompt,
-        "image_size": "1024x576", 
-        "num_inference_steps": 4
+    payload = {
+        "model": DOUBAO_IMAGE_MODEL,
+        "prompt": final_prompt,
+        "sequential_image_generation": "disabled",
+        "response_format": "url",
+        "size": "2K",
+        "stream": False,
+        "optimize_prompt_options": {"mode": "fast"}
     }
 
     try:
-        response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()
-        result = response.json()
-        image_url = result['data'][0]['url']
-        
-        img_data = requests.get(image_url).content
-        with open(output_path, 'wb') as f:
-            f.write(img_data)
-            
-        return output_path
+        resp = requests.post(url, headers=headers, json=payload, timeout=90)
+        resp.raise_for_status()
+        data = resp.json()
+        if 'data' in data and isinstance(data['data'], list) and data['data']:
+            img_url = data['data'][0].get('url')
+            if img_url:
+                img_bytes = requests.get(img_url, timeout=30).content
+                with open(output_path, 'wb') as f:
+                    f.write(img_bytes)
+                return output_path
+        print("❌ Doubao response missing image URL", file=sys.stderr)
+        return None
+    except requests.exceptions.HTTPError as e:
+        print(f"❌ Doubao HTTP error: {e}", file=sys.stderr)
+        if e.response is not None:
+            print(f"Response: {e.response.text}", file=sys.stderr)
+        return None
     except Exception as e:
-        print(f"❌ Error generating image: {e}", file=sys.stderr)
+        print(f"❌ Doubao image generation failed: {e}", file=sys.stderr)
+        return None
+
+def generate_images_batch(script_data, job_id):
+    """
+    使用豆包的组图生成功能,一次性生成所有场景图片(保证风格一致、人物一致)
+    
+    官方文档: https://www.volcengine.com/docs/82379/1824718
+    功能: 组图生成 - 基于用户输入的文字和图片,生成一组内容关联的图像
+    
+    Args:
+        script_data: DeepSeek 生成的完整脚本对象 {character_design, scenes, ...}
+        job_id: 任务ID
+    
+    Returns:
+        List[str]: 图片路径列表,失败返回 None
+    """
+    if not (DOUBAO_API_KEY and DOUBAO_API_BASE and DOUBAO_IMAGE_MODEL):
+        print("❌ Doubao API not configured.", file=sys.stderr)
+        return None
+
+    scenes = script_data.get('scenes', [])
+    character_design = script_data.get('character_design', '')
+    
+    if not scenes:
+        print("❌ No scenes found in script_data", file=sys.stderr)
+        return None
+
+    # 1. 构建组图 prompt (关键: 先定义角色,再描述场景)
+    if character_design:
+        # 有角色设计 → 连环画模式
+        character_prefix = (
+            f"Main Character (MUST REMAIN IDENTICAL): {character_design}\n"
+            "Global Visual Consistency:\n"
+            "- Style: warm picture-book illustration, soft edges, clean backgrounds\n"
+            "- Palette: gentle warm pastel (avoid neon)\n"
+            "- Lighting: consistent morning natural diffuse light\n"
+            "- Keep outfit, hair, facial proportions unchanged; no new accessories.\n\n"
+        )
+    else:
+        # 无角色设计 → 普通组图模式
+        character_prefix = "生成一组连贯的故事插画,风格保持一致。\n\n"
+    
+    # 2. 拼接所有场景描述(英文标签更利于风格控制)
+    scene_prompts = []
+    for i, scene in enumerate(scenes):
+        image_desc = scene.get('image_desc') or scene.get('image_prompt') or ''
+        scene_prompts.append(f"Image {i+1}: {image_desc}, no text, no watermark")
+    
+    combined_scenes = "\n".join(scene_prompts)
+    
+    # 3. 添加风格要求
+    if DOUBAO_IMAGE_STYLE == "comic":
+        style_suffix = (
+            "\n\nNegative constraints: no logos, no distorted anatomy, no extra fingers, no surreal elements."
+        )
+    else:
+        style_suffix = (
+            "\n\nNegative constraints: no logos, no distorted anatomy, no extra fingers, no surreal elements."
+        )
+    
+    final_prompt = character_prefix + combined_scenes + style_suffix
+    
+    # 4. 长度检查(豆包建议不超过300汉字或600英文单词)
+    words = final_prompt.split()
+    if len(words) > 600:
+        print(f"⚠️ Prompt too long ({len(words)} words), truncating to 600", file=sys.stderr)
+        final_prompt = " ".join(words[:600])
+
+    # 5. 调用豆包组图API
+    url = f"{DOUBAO_API_BASE}/images/generations"
+    headers = {
+        "Authorization": f"Bearer {DOUBAO_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": DOUBAO_IMAGE_MODEL,
+        "prompt": final_prompt,
+        "sequential_image_generation": "auto",  # 启用连环画模式(关键!)
+        "sequential_image_generation_options": {
+            "max_images": len(scenes)  # 指定生成数量
+        },
+        "response_format": "url",
+        "size": "2K",
+        "stream": False,
+        "optimize_prompt_options": {
+            "mode": "fast"  # 加速模式
+        }
+    }
+
+    try:
+        log_progress("generating_images", 25, f"Generating {len(scenes)} images in batch mode...")
+        
+        # 打印最终 prompt 用于调试(可选)
+        print(f"DEBUG: Final prompt for Doubao:\n{final_prompt[:500]}...\n", file=sys.stderr)
+        
+        resp = requests.post(url, headers=headers, json=payload, timeout=180)  # 组图耗时更长
+        resp.raise_for_status()
+        data = resp.json()
+
+        # 6. 解析返回的多张图片
+        if 'data' not in data or not isinstance(data['data'], list):
+            print(f"❌ Invalid response format: {data}", file=sys.stderr)
+            return None
+        
+        image_paths = []
+        for i, img_data in enumerate(data['data']):
+            img_url = img_data.get('url')
+            if not img_url:
+                print(f"❌ Missing URL for image {i+1}", file=sys.stderr)
+                continue
+                
+            # 下载并保存
+            output_filename = f"{job_id}_scene_{i}.jpg"
+            output_path = os.path.join(DIRS["image"], output_filename)
+            
+            img_bytes = requests.get(img_url, timeout=30).content
+            with open(output_path, 'wb') as f:
+                f.write(img_bytes)
+            
+            image_paths.append(output_path)
+            log_progress("image_downloaded", 30 + int((i / len(scenes)) * 30), 
+                        f"Downloaded image {i+1}/{len(scenes)}")
+        
+        if len(image_paths) != len(scenes):
+            print(f"⚠️ Expected {len(scenes)} images, got {len(image_paths)}", file=sys.stderr)
+        
+        return image_paths
+        
+    except requests.exceptions.Timeout:
+        print("❌ Doubao API timeout (batch generation takes longer)", file=sys.stderr)
+        return None
+    except requests.exceptions.HTTPError as e:
+        print(f"❌ Doubao HTTP error: {e}", file=sys.stderr)
+        print(f"Response: {e.response.text}", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"❌ Batch image generation failed: {e}", file=sys.stderr)
         return None
 
 def draw_text_with_stroke(draw, text, x, y, font, text_color, stroke_color, stroke_width):
@@ -526,7 +644,7 @@ def split_text_smartly(text, max_chars=45):
                     
     return final_chunks
 
-def create_subtitle_clip(text, translation, duration, video_size=(1024, 576)):
+def create_subtitle_clip(text, translation, duration, video_size=(1280, 720)):
     width, height = video_size
     
     # 1. Smart Sentence Alignment
@@ -619,11 +737,11 @@ def create_video_segment(image_path, audio_path, text_content, translation=""):
         
         # 添加字幕 (使用 PIL 替代 TextClip 以避免 ImageMagick 依赖)
         try:
-            txt_clip = create_subtitle_clip(text_content, translation, duration, video_size=(1024, 576))
-            final_clip = CompositeVideoClip([zoomed_clip, txt_clip], size=(1024, 576))
+            txt_clip = create_subtitle_clip(text_content, translation, duration, video_size=(1280, 720))
+            final_clip = CompositeVideoClip([zoomed_clip, txt_clip], size=(1280, 720))
         except Exception as e:
             print(f"⚠️ Subtitle generation failed: {e}. Skipping subtitles.", file=sys.stderr)
-            final_clip = CompositeVideoClip([zoomed_clip], size=(1024, 576))
+            final_clip = CompositeVideoClip([zoomed_clip], size=(1280, 720))
 
         final_clip = final_clip.set_audio(audio_clip)
         
@@ -649,28 +767,61 @@ async def main():
     job_id = args.jobId
     log_progress("started", 0, f"Starting video generation for Job {job_id}")
     
-    # 1. 生成分镜脚本
-    scenes = await generate_script(words_data)
-    if not scenes:
+    # 1. 生成分镜脚本(包含角色设计)
+    script_data = await generate_script(words_data)
+    if not script_data:
         log_progress("failed", 0, "Failed to generate script")
         sys.exit(1)
     
+    scenes = script_data.get('scenes', [])
+    if not scenes:
+        log_progress("failed", 0, "No scenes found in script")
+        sys.exit(1)
+    
+    # 2. 批量生成所有图片 (使用组图API,保证风格一致)
+    image_paths = generate_images_batch(script_data, job_id)  # 传入完整的 script_data
+    if not image_paths or len(image_paths) < len(scenes):
+        # 批量生成不足时,降级为逐张补齐以不中断流程
+        have = len(image_paths) if image_paths else 0
+        log_progress("warning", 40, f"Batch returned {have}/{len(scenes)} images. Falling back to single-image generation for remaining scenes.")
+        if not image_paths:
+            image_paths = []
+        # 逐张补齐缺失的图片
+        for i in range(have, len(scenes)):
+            image_desc = scenes[i].get('image_desc') or scenes[i].get('image_prompt') or ''
+            single_path = generate_image(image_desc, f"{job_id}_scene_{i}.jpg")
+            if single_path:
+                image_paths.append(single_path)
+                log_progress("image_downloaded", 45 + int((i / len(scenes)) * 10), f"Downloaded fallback image {i+1}/{len(scenes)}")
+            else:
+                log_progress("error", 0, f"Fallback image generation failed for scene {i+1}")
+        # 最终仍不足则失败
+        if len(image_paths) < len(scenes):
+            log_progress("failed", 0, f"Image generation failed after fallback. Expected {len(scenes)}, got {len(image_paths)}")
+            sys.exit(1)
+    
+    log_progress("images_generated", 60, f"All {len(image_paths)} images generated successfully")
+    
+    # 3. 为每个场景生成音频并组装视频片段
     video_clips = []
     total_scenes = len(scenes)
     
     for i, scene in enumerate(scenes):
-        progress = 20 + int((i / total_scenes) * 60) # 20% -> 80%
+        progress = 60 + int((i / total_scenes) * 20) # 60% -> 80%
         log_progress("processing_scene", progress, f"Processing Scene {i+1}/{total_scenes}")
         
         # 生成音频
         audio_filename = f"{job_id}_audio_{i}.mp3"
         audio_path = await generate_audio(scene['text'], audio_filename)
-        if not audio_path: continue
+        if not audio_path: 
+            print(f"⚠️ Audio generation failed for scene {i+1}, skipping", file=sys.stderr)
+            continue
         
-        # 生成图片
-        image_filename = f"{job_id}_scene_{i}.jpg"
-        image_path = generate_image(scene['image_prompt'], image_filename)
-        if not image_path: continue
+        # 使用批量生成的图片
+        image_path = image_paths[i] if i < len(image_paths) else None
+        if not image_path:
+            print(f"⚠️ No image available for scene {i+1}, skipping", file=sys.stderr)
+            continue
         
         # 创建片段 (传入文本用于字幕)
         # 兼容旧版 JSON (如果没有 translation 字段)

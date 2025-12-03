@@ -1,5 +1,5 @@
 import prisma from '../utils/prisma';
-import { safeJsonParse } from '../utils/datetime';
+import { normalizePronunciation } from '../utils/text';
 
 export class NotebookService {
   /**
@@ -96,19 +96,12 @@ export class NotebookService {
       }
     });
 
-    // 兼容解析 pronunciation 字段（可能为 string 或 object）
-    const parsePronunciations = (p: any) => {
-      if (!p) return { uk: '', us: '' };
-      if (typeof p === 'string') return safeJsonParse(p as string, { uk: '', us: '' });
-      return (p as { uk?: string; us?: string }) || { uk: '', us: '' };
-    };
-
     // 格式化响应数据
     const words = notebookEntries.map(entry => ({
       notebookId: entry.id,
       wordId: entry.wordId,
       word: entry.word.word,
-      pronunciations: parsePronunciations(entry.word.pronunciation),
+      pronunciations: normalizePronunciation(entry.word.pronunciation),
       addedAt: entry.addedAt,
       meanings: entry.word.meanings.map(meaning => ({
         meaningId: meaning.id,

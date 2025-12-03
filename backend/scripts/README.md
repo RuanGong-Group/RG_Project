@@ -1,14 +1,14 @@
 # 后端脚本工具集
 
-> **版本**: v3.0  
-> **更新日期**: 2025-11-28  
+> **版本**: v3.2
+> **更新日期**: 2025-12-03
 > **维护者**: RG_project 团队
 
 ---
 
 ## 📖 概述
 
-本目录包含数据清洗、测试管理和 API 文档生成的各类脚本工具。
+本目录包含数据清洗、测试管理、数据库诊断和 API 文档生成的各类脚本工具。
 
 ---
 
@@ -84,56 +84,91 @@ npx ts-node scripts/import-vocabulary.ts
 
 用于导入新的词库数据（如 CET-6、考研词汇等）。
 
-### 2. `list-books.ts`
-**列出所有词书**
-
-```bash
-npx ts-node scripts/list-books.ts
-```
-
-查看数据库中所有词书及其状态。
-
-### 3. `reset-for-testing.ts`
+### 2. `reset-for-testing.ts` ⭐
 **一键重置测试环境**
 
 ```bash
-# 快速重置（仅清除学习进度）
+# 快速重置（清除所有学习数据，保留词库）
 npx ts-node scripts/reset-for-testing.ts
 
 # 完全重置（清空+重新导入）
 npx ts-node scripts/reset-for-testing.ts --full
 ```
 
-团队开发中快速重置测试数据。
+**清理内容**：
+- UserLearningProgress（学习进度）
+- DailyCheckIn（每日打卡统计）⚠️ v3.2新增
+- UserWordNotebook（生词本）
+- UserBookSettings（词书乱序Salt）⚠️ v3.2新增
+- UserAchievement（用户成就）⚠️ v3.2新增
+- VideoGenerationJob（视频生成任务）⚠️ v3.2新增
+
+**保留数据**：
+- User（用户账户）
+- Word, Meaning, ExamplePool（词库）
+- BookTag, Relations（词书）
+
+### 3. `prepare-test-environment.ts`
+**准备高级测试环境**
+
+```bash
+npx ts-node scripts/prepare-test-environment.ts
+```
+
+构造复杂的测试场景（如不同熟练度分布、待复习单词等），用于开发和测试复习算法。
 
 ---
 
-## 🔧 开发调试脚本
+## 🔍 数据库诊断脚本（新增）
 
-### 1. `check-database-status.ts`
-**检查数据库状态**
-
-```bash
-npx ts-node scripts/check-database-status.ts
-```
-
-查看数据库连接、表结构等基本信息。
-
-### 2. `check-users.ts`
-**检查用户数据**
+### 1. `check-all-user-data.ts` ⭐ NEW
+**一键检查所有用户数据表**
 
 ```bash
-npx ts-node scripts/check-users.ts
+npx ts-node scripts/check-all-user-data.ts
 ```
 
-查看用户账号、学习进度等信息。
+快速诊断数据库状态，显示所有用户相关表的记录数量：
+- UserLearningProgress
+- DailyCheckIn
+- UserWordNotebook
+- UserBookSettings
+- UserAchievement
+- VideoGenerationJob
+- User
+
+**用途**：
+- 验证数据清理是否成功
+- 快速了解测试环境状态
+- 排查数据不一致问题
+
+### 2. `check-learning-data.ts`
+**检查学习进度详情**
+
+```bash
+npx ts-node scripts/check-learning-data.ts
+```
+
+详细显示：
+- 学习进度总数和按用户统计
+- 最近的学习记录
+- 今日学习/复习数据
+
+### 3. `check-checkin-data.ts`
+**检查每日打卡记录**
+
+```bash
+npx ts-node scripts/check-checkin-data.ts
+```
+
+显示最近的每日打卡记录，用于排查统计数据异常。
 
 ---
 
 ## 📚 API 文档工具
 
-### `extract-api-docs.js`
-**自动提取 API 文档**
+### `extract-api-docs.ts`
+**半自动提取 API 响应示例**
 
 在后端目录运行：
 
@@ -141,14 +176,19 @@ npx ts-node scripts/check-users.ts
 npm run docs
 ```
 
-生成的文档位于：`../../BACKEND_API_ACTUAL_RESPONSES.md`
+生成的文档位于：`../../docs/development/BACKEND_API_ACTUAL_RESPONSES.md`
 
-**工作原理**：扫描 `src/routes` 和 `src/controllers`，提取 `res.json()` 响应结构生成 Markdown。
+**工作原理**：使用正则表达式扫描 `src/controllers`，提取 `res.json()` 响应内容。
+
+**重要说明**：
+- 这是一个**辅助工具**，生成的文档需要**人工校对和补充**。
+- 无法自动提取路径、HTTP 方法等信息，需手动填写。
+- 建议未来迁移到 Swagger/OpenAPI 规范以实现真正的自动化。
 
 **最佳实践**：
-1. 修改 API 后运行 `npm run docs`
-2. 提交前检查文档变更
-3. 保持控制器响应格式统一
+1. 修改 API 后运行 `npm run docs` 获取响应格式草稿
+2. 手动补充路径、方法、参数等信息
+3. 提交前确保文档准确性
 
 ---
 
@@ -168,9 +208,6 @@ npx ts-node scripts/comprehensive-data-cleaning.ts
 
 # 4. 最终审计
 npx ts-node scripts/data-quality-audit.ts
-
-# 5. 人工抽检
-npx ts-node scripts/sample-words-check.ts
 ```
 
 详细流程参见：`../../DATA_IMPORT_AND_CLEANING_GUIDE.md`
@@ -182,13 +219,33 @@ npx ts-node scripts/sample-words-check.ts
 | 类型 | 脚本数量 | 说明 |
 |------|---------|------|
 | 数据清洗 | 5个 | 核心工作流程 |
-| 数据管理 | 3个 | 导入、查询、重置 |
-| 开发调试 | 2个 | 状态检查 |
+| 数据管理 | 3个 | 导入、重置、准备环境 |
+| 数据库诊断 | 3个 | 快速检查数据库状态 ⭐ v3.2新增 |
 | API文档 | 1个 | 自动生成文档 |
 | 文档 | 1个 | 本README |
-| **总计** | **12个** | 精简高效 |
+| **总计** | **13个** | 精简高效 |
 
 ---
 
-**最后更新**: 2025-11-30  
+## 🐛 Bug修复记录（v3.2）
+
+### 修复1: 测试数据清理不彻底
+**问题**：`reset-for-testing.ts` 只清理了 `UserLearningProgress`，遗漏了 `DailyCheckIn` 等表，导致统计数据显示异常。
+
+**修复**：扩展清理范围至6个表，确保测试环境完全干净。
+
+**影响文件**：
+- `backend/scripts/reset-for-testing.ts`
+
+### 修复2: 词书详情页统计数据错误
+**问题**：`BookDetail.tsx` 页面加载100个单词，但"单词总数"显示整个词书的3677，导致数据不一致和误导。
+
+**修复**：统计逻辑改为基于已加载的单词数量，并在UI中明确标注。
+
+**影响文件**：
+- `frontend_v3/src/pages/BookDetail.tsx`
+
+---
+
+**最后更新**: 2025-12-03
 **维护者**: RG_project 团队

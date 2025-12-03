@@ -5,39 +5,6 @@ import { getDueReviews, getNewMeanings, recordLearningResult } from './learning.
 
 export type BoosterTicket = { id: string; meaningId: number; afterN: number; createdAt: string };
 
-// Minimal in-memory demo implementation to match routes used by frontend/tests.
-const words = [
-  { 
-    id: 5806, 
-    word: 'word', 
-    lemma: 'word', 
-    pronunciations: { uk: '/wɜːd/', us: '/wɝːd/' }, 
-    meanings: [ 
-      { id: 9592, partOfSpeech: 'n.', definition: '单词，词', examples: ['Actions speak louder than words.'] }, 
-      { id: 9593, partOfSpeech: 'n.', definition: '话语，言语', examples: ['I need to have a word with you about the project.'] }
-    ] 
-  },
-  { 
-    id: 5807, 
-    word: 'study', 
-    lemma: 'study', 
-    pronunciations: { uk: '/ˈstʌdi/', us: '/ˈstʌdi/' }, 
-    meanings: [ 
-      { id: 9595, partOfSpeech: 'v.', definition: '学习，研究', examples: ['She is studying for her final exams.'] },
-      { id: 9596, partOfSpeech: 'n.', definition: '学习，研究', examples: ['The study shows that exercise improves memory.'] }
-    ] 
-  }
-];
-
-// Add extra demo words
-words.push(
-  { id: 5901, word: 'example', lemma: 'example', pronunciations: { uk: '/ɪɡˈzɑːmpəl/', us: '/ɪɡˈzæmpəl/' }, meanings: [ { id: 9701, partOfSpeech: 'n.', definition: '示例，例子', examples: ['This is an example sentence.'] } ] },
-  { id: 5902, word: 'practice', lemma: 'practice', pronunciations: { uk: '/ˈpræktɪs/', us: '/ˈpræktɪs/' }, meanings: [ { id: 9702, partOfSpeech: 'n.', definition: '练习，实践', examples: ['Practice makes perfect.'] } ] },
-  { id: 5903, word: 'improve', lemma: 'improve', pronunciations: { uk: '/ɪmˈpruːv/', us: '/ɪmˈpruːv/' }, meanings: [ { id: 9703, partOfSpeech: 'v.', definition: '改进，提高', examples: ['You need to improve your grammar.'] } ] },
-  { id: 5904, word: 'challenge', lemma: 'challenge', pronunciations: { uk: '/ˈtʃælɪndʒ/', us: '/ˈtʃælɪndʒ/' }, meanings: [ { id: 9704, partOfSpeech: 'n.', definition: '挑战', examples: ['This problem is a real challenge.'] } ] },
-  { id: 5905, word: 'discover', lemma: 'discover', pronunciations: { uk: '/dɪˈskʌvə/', us: '/dɪˈskʌvər/' }, meanings: [ { id: 9705, partOfSpeech: 'v.', definition: '发现', examples: ['She discovered a new technique.'] } ] }
-);
-
 // In-memory session store
 const sessions = new Map<string, any>();
 const store = getStore();
@@ -199,16 +166,7 @@ export async function pickNextWordForSession(session: any) {
       }
     }
     
-    // Fallback: Use hardcoded data if no database items
-    for (const w of words) {
-      for (const m of w.meanings) {
-        const key = `meaning:${m.id}`;
-        if (!session.learned.has(key) && !session.skipped.has(key)) {
-          return null; 
-        }
-      }
-    }
-    
+    // Fallback: No more words available
     return null;
   }
   
@@ -246,16 +204,7 @@ export async function pickNextMeaningForSession(session: any) {
     }
   }
 
-  // Fallback: Use hardcoded data if no database items
-  for (const w of words) {
-    for (const m of w.meanings) {
-      const key = `meaning:${m.id}`;
-      if (!session.learned.has(key) && !session.skipped.has(key)) {
-        return { meaningId: m.id, wordId: w.id };
-      }
-    }
-  }
-
+  // Fallback: No more meanings available
   return null;
 }
 
@@ -280,26 +229,7 @@ export async function makeQuestionForMeaning(meaningId: number) {
   });
 
   if (!targetMeaning) {
-    // Fallback to hardcoded data
-    let correctText: string | null = null;
-    for (const w of words) {
-      const m = w.meanings.find((x: any) => x.id === meaningId);
-      if (m) { correctText = m.definition; break; }
-    }
-    const options = [correctText];
-    for (const w of words) {
-      for (const m of w.meanings) {
-        if (options.length >= 4) break;
-        if (m.definition !== correctText) options.push(m.definition);
-      }
-      if (options.length >= 4) break;
-    }
-    for (let i = options.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [options[i], options[j]] = [options[j], options[i]];
-    }
-    const opts = options.map((t, idx) => ({ id: idx + 1, text: t }));
-    return { questionId: randomUUID(), options: opts, prompt: '请选择正确含义', timeLimitSec: 5, correctText };
+    throw new Error(`Meaning not found: ${meaningId}`);
   }
 
   const correctText = targetMeaning.definition;

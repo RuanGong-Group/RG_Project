@@ -154,7 +154,7 @@ export default function Settings() {
   // 加载中
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-amber-50 flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
           <p className="text-gray-600">加载设置中...</p>
@@ -164,18 +164,18 @@ export default function Settings() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-amber-50 p-4">
       <div className="max-w-2xl mx-auto">
         {/* 顶部导航 */}
         <div className="flex items-center justify-between mb-6">
           <button
             onClick={handleBack}
-            className="flex items-center text-gray-600 hover:text-gray-900"
+            className="flex items-center text-amber-700 hover:text-amber-900"
           >
             <span className="mr-2">←</span>
             返回
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">⚙️ 用户设置</h1>
+          <h1 className="text-2xl font-bold text-amber-900">⚙️ 用户设置</h1>
           <div className="w-16"></div>
         </div>
 
@@ -225,7 +225,7 @@ export default function Settings() {
                 <button
                   onClick={handleSaveDailyGoal}
                   disabled={saving}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors"
+                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors"
                 >
                   {saving ? '保存中...' : '保存'}
                 </button>
@@ -242,7 +242,7 @@ export default function Settings() {
           <h2 className="text-xl font-bold text-gray-900 mb-4">📚 词书管理</h2>
           
           {currentBook && (
-            <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+            <div className="mb-4 p-4 bg-amber-50 rounded-lg border border-amber-200">
               <div className="flex justify-between items-center">
                 <div>
                   <div className="font-medium text-gray-900">{currentBook.tagName}</div>
@@ -250,7 +250,7 @@ export default function Settings() {
                 </div>
                 <button
                   onClick={() => navigate(`/books/${currentBook.id}`)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
                 >
                   查看详情 →
                 </button>

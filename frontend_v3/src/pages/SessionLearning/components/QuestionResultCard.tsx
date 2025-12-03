@@ -100,7 +100,9 @@ export default function QuestionResultCard({
           {/* 如果是拼写题且答错，显示用户的输入 */}
           {!isCorrect && card.userInput && (
             <p className="mt-2 text-red-500 text-base">
-              你的输入: <span className="font-mono line-through">{card.userInput}</span>
+              <div className="text-red-500 text-lg mb-4">
+              你的输入: <span className="font-mono">{card.userInput}</span>
+            </div>
             </p>
           )}
         </div>

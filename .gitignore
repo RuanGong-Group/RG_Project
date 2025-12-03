@@ -50,6 +50,10 @@ pnpm-debug.log*
 backend/node_modules/.prisma/client/
 backend/prisma/dev.db
 
+# 编译产物
+backend/dist/
+frontend_v3/dist/
+
 # Data & Media (Local only)
 RG_data/
 backend/scripts/video_gen/output/

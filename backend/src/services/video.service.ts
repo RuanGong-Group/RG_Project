@@ -6,16 +6,23 @@ import crypto from 'crypto';
 import prisma from '../utils/prisma';
 
 // Use process.cwd() to ensure correct path in both dev and prod (assuming run from project root)
-const PYTHON_SCRIPT_PATH = path.join(process.cwd(), 'scripts/video_gen/generate_daily_video.py');
-// Detect python executable (use venv if available)
-const VENV_PYTHON = path.join(process.cwd(), 'scripts/video_gen/venv/Scripts/python.exe'); // Windows
-const SYSTEM_PYTHON = 'python';
+const PYTHON_SCRIPT_PATH = process.env.VIDEO_GEN_SCRIPT_PATH 
+  ? path.resolve(process.cwd(), process.env.VIDEO_GEN_SCRIPT_PATH)
+  : path.join(process.cwd(), 'scripts/video_gen/generate_daily_video.py');
 
+// Detect python executable (use env var if available, else fallback)
 const getPythonCommand = () => {
-  if (fs.existsSync(VENV_PYTHON)) {
-    return VENV_PYTHON;
+  if (process.env.PYTHON_EXECUTABLE_PATH) {
+    return process.env.PYTHON_EXECUTABLE_PATH;
   }
-  return SYSTEM_PYTHON;
+  
+  // Fallback to venv if exists
+  const venvPython = path.join(process.cwd(), 'scripts/video_gen/venv/Scripts/python.exe'); // Windows
+  if (fs.existsSync(venvPython)) {
+    return venvPython;
+  }
+  
+  return 'python'; // System default
 };
 
 interface WordData {

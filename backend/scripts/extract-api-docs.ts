@@ -16,7 +16,7 @@ interface ApiEndpoint {
 }
 
 const controllersDir = path.join(__dirname, '../src/controllers');
-const outputFile = path.join(__dirname, '../../BACKEND_API_ACTUAL_RESPONSES.md');
+const outputFile = path.join(__dirname, '../../docs/development/BACKEND_API_ACTUAL_RESPONSES.md');
 
 /**
  * 读取所有控制器文件
