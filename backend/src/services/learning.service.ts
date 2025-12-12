@@ -61,7 +61,8 @@ export async function recordLearningResult(
   userId: number,
   meaningId: number,
   isCorrect: boolean,
-  responseQuality?: number
+  responseQuality?: number,
+  isBooster?: boolean  // 新增参数：标记是否为 Booster（短期强化）
 ) {
   // 如果未提供 quality，则根据 isCorrect 推断
   const quality = responseQuality !== undefined 
@@ -95,7 +96,10 @@ export async function recordLearningResult(
     });
 
     // 更新每日打卡统计 (新学)
-    await updateTodayCheckIn(userId, 'learn-meaning', { meaningId });
+    // Booster 不计入每日目标统计（属于同一会话内的短期强化）
+    if (!isBooster) {
+      await updateTodayCheckIn(userId, 'learn-meaning', { meaningId });
+    }
 
   } else {
     // 更新现有进度
@@ -131,7 +135,10 @@ export async function recordLearningResult(
     });
 
     // 更新每日打卡统计 (复习)
-    await updateTodayCheckIn(userId, 'review-meaning', { meaningId });
+    // Booster 不计入每日目标统计（属于同一会话内的短期强化，非跨天复习）
+    if (!isBooster) {
+      await updateTodayCheckIn(userId, 'review-meaning', { meaningId });
+    }
   }
 
   return progress;

@@ -16,10 +16,16 @@ const getPythonCommand = () => {
     return process.env.PYTHON_EXECUTABLE_PATH;
   }
   
-  // Fallback to venv if exists
-  const venvPython = path.join(process.cwd(), 'scripts/video_gen/venv/Scripts/python.exe'); // Windows
-  if (fs.existsSync(venvPython)) {
-    return venvPython;
+  // Fallback to venv if exists (cross-platform)
+  const venvBase = path.join(process.cwd(), 'scripts/video_gen/venv');
+  const venvPythonWin = path.join(venvBase, 'Scripts', 'python.exe');
+  const venvPythonUnix = path.join(venvBase, 'bin', 'python');
+  
+  if (fs.existsSync(venvPythonWin)) {
+    return venvPythonWin;
+  }
+  if (fs.existsSync(venvPythonUnix)) {
+    return venvPythonUnix;
   }
   
   return 'python'; // System default
@@ -98,15 +104,19 @@ export class VideoService {
             if (log.status === 'completed') dbStatus = 'completed';
             if (log.status === 'failed' || log.status === 'error') dbStatus = 'failed';
 
-            // 转换绝对路径为相对 URL 路径
-            // 假设 log.video_path 是绝对路径，如 D:\桌面\RG_project\RG_data\videos\daily_xxx.mp4
-            // 我们需要将其转换为 /api/static/videos/daily_xxx.mp4
-            // 前提是 app.ts 中配置了 app.use('/api/static', express.static(RG_DATA_PATH));
-            
+            // 处理视频 URL
+            // 优先使用 COS URL (如果启用了云存储)，否则使用本地路径
             let videoUrl = null;
-            if (log.video_path) {
+            
+            if (log.video_url) {
+              // Python 脚本已经返回了完整的 URL (COS URL 或本地 URL)
+              videoUrl = log.video_url;
+            } else if (log.cos_url) {
+              // 兼容旧版本：直接使用 cos_url
+              videoUrl = log.cos_url;
+            } else if (log.video_path) {
+              // 降级方案：如果没有云 URL，生成本地 URL
               const fileName = path.basename(log.video_path);
-              // 视频生成在 videos/daily 子目录下
               videoUrl = `/api/static/videos/daily/${fileName}`;
             }
 
@@ -116,8 +126,8 @@ export class VideoService {
                 status: dbStatus,
                 progress: log.progress,
                 errorMessage: log.status === 'error' ? log.message : undefined,
-                videoPath: log.video_path, // 保留绝对路径用于文件管理
-                videoUrl: videoUrl,        // 生成可访问的 URL
+                videoPath: log.video_path, // 保留绝对路径用于文件管理（如果有）
+                videoUrl: videoUrl,        // 使用 COS URL 或本地 URL
                 completedAt: dbStatus === 'completed' ? new Date() : undefined
               }
             });

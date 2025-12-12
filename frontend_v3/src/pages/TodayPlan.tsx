@@ -114,10 +114,10 @@ export default function TodayPlan() {
 
     setGeneratingVideo(true);
     try {
-      // Check learning status
-      const newWords = await videoService.getTodayNewWords();
-      if (newWords.length === 0) {
-        alert('请先完成今日学习 (Please complete today\'s learning first)');
+      // Check learning status - 允许纯复习也能生成视频
+      // 只要今天有学习活动(新学或复习)即可
+      if (plan && plan.progress.total === 0) {
+        alert('请先完成今日学习或复习 (Please complete today\'s learning or review first)');
         setGeneratingVideo(false);
         return;
       }

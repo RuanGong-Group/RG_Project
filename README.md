@@ -11,9 +11,40 @@
 
 ## 快速开始
 
-### 前置要求
+### 方式一：Docker 部署（推荐）
+
+**前置要求**：
+- Docker Desktop（Windows/Mac）或 Docker Engine（Linux）
+- Git
+
+**一键启动**：
+```bash
+# 1. 克隆代码
+git clone https://github.com/RuanGong-Group/RG_project.git
+cd RG_project
+
+# 2. 启动所有服务
+docker-compose up -d
+
+# 3. 等待约30秒，然后初始化数据库
+docker exec rg_backend npx prisma migrate deploy
+docker exec rg_backend npx prisma db seed
+
+# 4. 访问应用
+# 前端：http://localhost:8080
+# 后端：http://localhost:4000
+```
+
+**详细文档**：[Docker 部署指南](DOCKER_DEPLOYMENT.md)
+
+---
+
+### 方式二：本地开发环境
+
+**前置要求**：
 - Node.js v18+ 
 - MySQL 8.0+
+- Python 3.9+
 - Git
 
 ### 获取项目
@@ -40,25 +71,40 @@ cd RG_project
 
 **网盘链接**: [由项目负责人在团队群中分享]
 
-### 详细配置步骤
+**配置步骤**：
 
-本项目包含前后端，需要分别安装依赖和配置环境。**详细步骤请务必参考**：
-- **[环境配置指南](docs/development/ENVIRONMENT_SETUP_GUIDE.md)** - 完整的环境搭建步骤
+详细步骤请参考：
+- **[环境配置指南](docs/development/ENVIRONMENT_SETUP_GUIDE.md)** - 完整的本地环境搭建步骤
 - **[团队协作指南](docs/development/TEAM_COLLABORATION_GUIDE.md)** - Git 工作流和协作规范
 
-## 核心功能
-- **三路径学习模型**: 根据用户对单词的自我认知（认识、模糊、不认识），提供差异化的学习路径，实现高效学习。
-- **SM-2 智能复习算法**: 基于艾宾浩斯记忆曲线，智能安排复习计划，确保长久记忆。
-- **词义级别跟踪**: 精确到每个单词的每个词义进行学习和复习，真正掌握单词。
-- **AI 视频生成**: 将每日所学单词自动生成总结视频，提供沉浸式复习体验。
+---
+
+## 核心功能（V3.1）
+
+- **三路径学习模型**: 根据用户对单词的自我认知（认识、模糊、不认识），提供差异化的学习路径。
+- **SM-2 智能复习算法**: 基于艾宾浩斯记忆曲线，智能安排复习计划。
+- **词义级别跟踪**: 精确到每个单词的每个词义进行学习和复习。
+- **复习优先策略**: 每日目标包含新学习和复习总数，复习无上限，新学习受目标限制。
+- **AI 视频生成**: 支持纯复习或混合学习场景，自动生成每日学习总结视频。
+- **Booster 短期强化**: 针对易混淆词义的快速强化复习机制。
 - **数据驱动**: 内置丰富的数据清洗和管理脚本，确保词库质量。
 
 ## 文档导航
-- **产品需求**: [docs/requirements/PRD_V3.md](docs/requirements/PRD_V3.md) - 了解产品功能和设计理念。
-- **数据库设计**: [docs/design/Database_Design_Document_V3.md](docs/design/Database_Design_Document_V3.md) - 查看数据模型和表结构。
-- **开发经验总结**: [docs/development/DEVELOPMENT_LESSONS_LEARNED.md](docs/development/DEVELOPMENT_LESSONS_LEARNED.md) - 记录了项目开发过程中的问题与解决方案，是团队宝贵的财富。
-- **后端脚本工具集**: [backend/scripts/README.md](backend/scripts/README.md) - 查看所有后端工具脚本的用途和用法。
-- **API 响应文档**: [docs/development/BACKEND_API_ACTUAL_RESPONSES.md](docs/development/BACKEND_API_ACTUAL_RESPONSES.md) - 后端接口实际返回格式参考。
+
+### 核心文档
+- **[产品需求 (PRD V3.1)](docs/requirements/PRD_V3.md)** - 产品功能和设计理念
+- **[数据库设计 (V3)](docs/design/Database_Design_Document_V3.md)** - 数据模型和表结构
+
+### 部署文档
+- **[Docker 部署指南](DOCKER_DEPLOYMENT.md)** - 容器化部署（推荐）
+- **[云端部署指南](docs/development/CLOUD_DEPLOYMENT_GUIDE.md)** - 腾讯云部署详细步骤
+
+### 开发文档
+- **[环境配置指南](docs/development/ENVIRONMENT_SETUP_GUIDE.md)** - 本地开发环境搭建
+- **[团队协作指南](docs/development/TEAM_COLLABORATION_GUIDE.md)** - Git 工作流
+- **[开发经验总结](docs/development/DEVELOPMENT_LESSONS_LEARNED.md)** - 问题与解决方案
+- **[后端脚本工具集](backend/scripts/README.md)** - 数据处理脚本文档
+- **[API 响应文档](docs/development/BACKEND_API_ACTUAL_RESPONSES.md)** - 接口格式参考
 
 ## 目录结构
 ```

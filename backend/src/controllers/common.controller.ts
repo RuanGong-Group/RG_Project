@@ -6,7 +6,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import prisma from '../utils/prisma';
-import { getBeijingTime } from '../utils/datetime';
+import { getBeijingTime, getBeijingToday } from '../utils/datetime';
 import { getTodayLearnedNewWords as getTodayLearnedNewWordsService } from '../services/learning.service';
 import { getOrCreateSalt, applyStableShuffle } from '../utils/shuffle';
 
@@ -69,31 +69,38 @@ export const getTodayPlan = async (
 
     const now = getBeijingTime();
     const todayStart = new Date(now);
-    todayStart.setUTCHours(0, 0, 0, 0); // 使用 setUTCHours 而不是 setHours
+    todayStart.setUTCHours(0, 0, 0, 0);
 
-    // 1. 统计今日进度
-    const learnedProgressToday = await prisma.userLearningProgress.findMany({
-      where: {
-        userId,
-        createdAt: { gte: todayStart },
-        meaning: { word: { bookTags: { some: { bookTagId: user.currentBookTagId } } } }
-      },
-      select: { meaning: { select: { wordId: true } } },
-      distinct: ['meaningId']
-    });
-    const learnedWordsToday = new Set(learnedProgressToday.map(p => p.meaning.wordId));
+    // 1. 从 dailyCheckIn 表获取今日统计（更准确，与其他页面一致）
+    const today = getBeijingToday(); // 使用 Date 对象，不是字符串
 
-    const reviewedProgressToday = await prisma.userLearningProgress.findMany({
+    const todayCheckIn = await prisma.dailyCheckIn.findUnique({
       where: {
-        userId,
-        lastReviewAt: { gte: todayStart },
-        reviewCount: { gt: 1 }, // reviewCount > 1 表示是复习
-        meaning: { word: { bookTags: { some: { bookTagId: user.currentBookTagId } } } }
-      },
-      select: { meaning: { select: { wordId: true } } },
-      distinct: ['meaningId']
+        userId_checkInDate: {
+          userId: userId,
+          checkInDate: today
+        }
+      }
     });
-    const reviewedWordsToday = new Set(reviewedProgressToday.map(p => p.meaning.wordId));
+
+    const learnedWordsToday = todayCheckIn?.wordsLearned || 0;
+    const reviewedWordsToday = todayCheckIn?.wordsReviewed || 0;
+
+    // 🔍 调试日志：检查统计数据来源
+    console.log('📊 [getTodayPlan] 统计数据:', {
+      userId,
+      today,
+      fromDB: {
+        wordsLearned: todayCheckIn?.wordsLearned,
+        wordsReviewed: todayCheckIn?.wordsReviewed,
+        meaningsLearned: todayCheckIn?.meaningsLearned,
+        meaningsReviewed: todayCheckIn?.meaningsReviewed
+      },
+      willReturn: {
+        learned: learnedWordsToday,
+        reviewed: reviewedWordsToday
+      }
+    });
 
     // 2. 统计待复习内容
     const dueReviews = await prisma.userLearningProgress.findMany({
@@ -160,8 +167,9 @@ export const getTodayPlan = async (
       .filter((w): w is NonNullable<typeof w> => !!w);
 
     const dailyGoal = user.dailyLearningGoal || 20;
-    // 新学配额 = 目标 - 到期复习单词数 - 已完成新学单词数
-    const newLearningQuota = Math.max(0, dailyGoal - reviewWords.length - learnedWordsToday.size);
+    // 新学配额 = 目标 - 今日总完成量（新学+复习）
+    const totalCompleted = learnedWordsToday + reviewedWordsToday;
+    const newLearningQuota = Math.max(0, dailyGoal - totalCompleted);
 
     res.json({
       success: true,
@@ -169,9 +177,9 @@ export const getTodayPlan = async (
       data: {
         dailyGoal,
         progress: {
-          learned: learnedWordsToday.size,
-          reviewed: reviewedWordsToday.size,
-          total: learnedWordsToday.size + reviewedWordsToday.size
+          learned: learnedWordsToday,
+          reviewed: reviewedWordsToday,
+          total: learnedWordsToday + reviewedWordsToday
         },
         review: {
           dueCount: totalDueMeanings,

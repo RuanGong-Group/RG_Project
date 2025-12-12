@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+// Use environment variable or relative path for API base URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 interface Book {
   id: number;

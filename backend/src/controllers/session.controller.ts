@@ -41,7 +41,9 @@ export const startSession = async (req: AuthRequest, res: Response) => {
       const checkIn = await prisma.dailyCheckIn.findUnique({
         where: { userId_checkInDate: { userId, checkInDate: today } }
       });
-      if (checkIn && checkIn.wordsLearned >= dailyGoal) {
+      if (checkIn) {
+        const totalCompleted = checkIn.wordsLearned + checkIn.wordsReviewed;
+        if (totalCompleted >= dailyGoal) {
           return res.json({ 
             success: true, 
             message: '今日学习目标已完成！',
@@ -55,6 +57,7 @@ export const startSession = async (req: AuthRequest, res: Response) => {
               step: 0
             } 
           });
+        }
       }
     }
 
@@ -410,8 +413,10 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
       
       // Persist learning result to database
       try {
-        await recordLearningResult(session.userId, meaningId, !!isCorrect);
-        if (isCorrect) {
+        // 传递 isBooster 参数，防止短期强化被错误统计为复习
+        await recordLearningResult(session.userId, meaningId, !!isCorrect, undefined, isBooster);
+        // Booster 的统计已在 recordLearningResult 内部处理，此处不再重复统计
+        if (isCorrect && !isBooster) {
           const meaningCheckInType = session.mode === 'review-only' ? 'review-meaning' : 'learn-meaning';
           await updateTodayCheckIn(session.userId, meaningCheckInType);
         }
@@ -841,20 +846,23 @@ export const getNextQuestions = async (req: AuthRequest, res: Response) => {
         // Use session goal (which was set from user config at session start)
         const goal = session.dailyGoal || 10;
         
-        if (checkIn && checkIn.wordsLearned >= goal) {
-           return res.json({ 
-             success: true, 
-             data: { 
-               sessionId: session.id, 
-               steps: [{ 
-                 type: 'session-complete', 
-                 data: { 
-                   message: '今日学习目标已完成！',
-                   isGoalReached: true 
-                 } 
-               }] 
-             } 
-           });
+        if (checkIn) {
+          const totalCompleted = checkIn.wordsLearned + checkIn.wordsReviewed;
+          if (totalCompleted >= goal) {
+            return res.json({ 
+              success: true, 
+              data: { 
+                sessionId: session.id, 
+                steps: [{ 
+                  type: 'session-complete', 
+                  data: { 
+                    message: '今日学习目标已完成！',
+                    isGoalReached: true 
+                  } 
+                }] 
+              } 
+            });
+          }
         }
       }
 
