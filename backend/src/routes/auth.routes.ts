@@ -1,7 +1,14 @@
 import { Router } from 'express';
-import { register, login } from '../controllers/auth.controller';
+import { register, login, githubCallback } from '../controllers/auth.controller';
 
 const router = Router();
+
+/**
+ * @route   GET /api/auth/github/callback
+ * @desc    GitHub OAuth Callback
+ * @access  Public
+ */
+router.get('/github/callback', githubCallback);
 
 /**
  * @route   POST /api/auth/register

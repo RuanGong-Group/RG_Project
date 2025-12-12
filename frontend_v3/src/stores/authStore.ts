@@ -20,6 +20,7 @@ interface AuthState {
   logout: () => void;
   clearError: () => void;
   initAuth: () => void;
+  setToken: (token: string, user?: User) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -100,5 +101,15 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  setToken: (token: string, user?: User) => {
+    localStorage.setItem('jm_token', token);
+    set({
+      token,
+      user: user || null,
+      isAuthenticated: true,
+      error: null
+    });
   }
 }));

@@ -38,7 +38,7 @@ export default function VideoPlayerPage() {
   // If videoPath is absolute, we need to extract filename.
   const filename = job.videoPath ? job.videoPath.split(/[\\/]/).pop() : `daily_video_${job.jobId}.mp4`;
   // Base URL handling: if VITE_API_BASE_URL is http://localhost:3000/api, we want http://localhost:3000
-  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+  const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
   const serverBase = apiBase.replace(/\/api$/, ''); 
   const videoUrl = job.videoUrl || `${serverBase}/api/static/videos/${filename}`;
 

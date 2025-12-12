@@ -14,6 +14,7 @@ import Settings from './pages/Settings';
 import BookWordsTest from './pages/BookWordsTest';
 import BookDetail from './pages/BookDetail';
 import VideoPlayerPage from './pages/VideoPlayerPage';
+import OAuthCallback from './pages/OAuthCallback';
 
 // 受保护的路由组件
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 const routes: RouteObject[] = [
   { path: '/login', element: <Login /> },
   { path: '/register', element: <Register /> },
+  { path: '/oauth/callback', element: <OAuthCallback /> },
   { path: '/', element: <ProtectedRoute><Home /></ProtectedRoute> },
   { path: '/today-plan', element: <ProtectedRoute><TodayPlan /></ProtectedRoute> },
   { path: '/learn', element: <ProtectedRoute><SessionLearning /></ProtectedRoute> }, // 重定向旧路由到新组件

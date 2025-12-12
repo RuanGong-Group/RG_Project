@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: rg_backend
+    restart: always
+    ports:
+      - "4000:3000"  # 使用4000端口避免Windows保留端口冲突
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=mysql://root:password@db:3306/rg_vocabulary
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # Ensure Python script knows it's in Docker/Cloud if needed, 
+      # though we rely on env vars for paths mostly.
+      - LOCAL_STORAGE_PATH=/app/RG_data
+    depends_on:
+      - db
+      - redis
+    volumes:
+      # 开发+生产通用：运行时数据和静态资源
+      - ./RG_data:/app/RG_data
+      - ./backend/assets:/app/assets
+      # 开发环境推荐：挂载 scripts 以支持热更新
+      # 生产环境可选：取消注释下面两行以提高稳定性
+      - ./backend/scripts:/app/scripts
+      # - ./backend/prisma:/app/prisma  # 可选：频繁修改数据库模型时启用 
+
+  frontend:
+    build: ./frontend_v3
+    container_name: rg_frontend
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+  db:
+    image: mysql:8.0
+    container_name: rg_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: rg_vocabulary
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      # 注释掉自动初始化，改用手动导入
+      # - ../RG_data_sources/initial_data_clean.sql:/docker-entrypoint-initdb.d/init.sql
+
+  redis:
+    image: redis:alpine
+    container_name: rg_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  db_data:
+  redis_data:

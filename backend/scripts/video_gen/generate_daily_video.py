@@ -12,6 +12,8 @@ from gtts import gTTS
 import pyttsx3
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
+from qcloud_cos import CosConfig
+from qcloud_cos import CosS3Client
 
 # Numpy compatibility for moviepy 1.0.3
 if not hasattr(np, 'int'):
@@ -41,6 +43,23 @@ DOUBAO_API_KEY = os.getenv("DOUBAO_API_KEY")
 DOUBAO_API_BASE = os.getenv("DOUBAO_API_BASE", "https://ark.cn-beijing.volces.com/api/v3")
 DOUBAO_IMAGE_MODEL = os.getenv("DOUBAO_IMAGE_MODEL", "doubao-seedream-4-0-250828")
 DOUBAO_IMAGE_STYLE = os.getenv("DOUBAO_IMAGE_STYLE", "comic")  # comic | realistic
+
+# COS Configuration
+COS_SECRET_ID = os.getenv("COS_SECRET_ID")
+COS_SECRET_KEY = os.getenv("COS_SECRET_KEY")
+COS_REGION = os.getenv("COS_REGION", "ap-guangzhou")
+COS_BUCKET_NAME = os.getenv("COS_BUCKET_NAME")
+COS_UPLOAD_ENABLED = os.getenv("COS_UPLOAD_ENABLED", "false").lower() == "true"
+
+# Font Configuration
+# Use relative path from backend/assets/fonts
+FONT_PATH = os.path.join(backend_dir, "assets", "fonts", "simhei.ttf")
+if not os.path.exists(FONT_PATH):
+    # Fallback to Windows font if local asset not found (dev mode)
+    if os.path.exists("C:/Windows/Fonts/simhei.ttf"):
+        FONT_PATH = "C:/Windows/Fonts/simhei.ttf"
+    else:
+        FONT_PATH = "arial.ttf" # System default fallback
 
 # 验证必需的 API Keys
 if not API_KEY:
@@ -99,7 +118,7 @@ async def generate_script(word_data):
 
     user_msg = f"""
         TASK OVERVIEW:
-        Produce EXACT JSON for a children's picture-book sequence (4–6 scenes) with ONE immutable main character and FULL vocabulary coverage.
+        Produce EXACT JSON for a coherent children's picture-book story (4–6 scenes) with ONE immutable main character and FULL vocabulary coverage.
 
         STRICT OUTPUT RULES:
         - Return ONLY JSON (no comments/markdown/code fences). Field order fixed.
@@ -110,26 +129,61 @@ async def generate_script(word_data):
         - MUST remain unchanged across all scenes. Do NOT alter outfit or features.
         - No magical/surreal traits; suitable for children.
 
-        ANCHOR WORD:
-        - Pick the most concrete word from TODAY'S VOCABULARY as story core.
-        - For each selected vocabulary word, you MAY freely choose the most natural part-of-speech and sense (meaning) to fit the scene.
-            Do NOT force a single fixed meaning; prioritize natural, coherent usage.
+        STORY STRUCTURE (FLEXIBLE BUT COHERENT):
+        Choose ONE of these narrative patterns based on vocabulary:
+        
+        A) GOAL-DRIVEN: Character wants something → encounters obstacles → achieves/learns
+           Example: Wants to find a gift → searches different places → discovers perfect item
+        
+        B) DISCOVERY JOURNEY: Character explores → encounters interesting things → reaches destination
+           Example: Walks through park → notices flowers/birds → arrives at favorite spot
+        
+        C) CAUSE-EFFECT CHAIN: Action A leads to B, B leads to C, forming a logical sequence
+           Example: Rain starts → character takes umbrella → puddle forms → character jumps in it
+        
+        D) DAILY ROUTINE: Character performs connected activities throughout the day
+           Example: Morning wake-up → breakfast → school → play → bedtime
+        
+        CORE REQUIREMENT (APPLIES TO ALL PATTERNS):
+        - Each scene MUST be a DIRECT CONSEQUENCE of the previous scene
+        - Character's location changes should be GRADUAL and LOGICAL (no sudden teleportation)
+        - Actions must be MOTIVATED by what happened before or character's personality
+        
+        ANCHOR WORD STRATEGY:
+        - Identify the most CONCRETE, VISUAL word from vocabulary as story foundation
+        - Build 60-70% of the story around this anchor word's context
+        - Other words should fit NATURALLY into this main scenario (don't force unrelated words into same sentence)
+        - If a word doesn't fit organically, create a SMOOTH TRANSITION scene to introduce it
 
-        SCENE RULES:
-        - Exactly 4–6 scenes.
-        - Each scene has ONE English sentence (8–15 words), no semicolons/quotes/ellipses, not starting with And/But.
-        - Each sentence MUST naturally use ≥1 vocabulary word.
-        - Use transitions across scenes: Then / After that / Meanwhile / Later that day.
+        SCENE CONSTRUCTION (PRIORITY: LOGIC > VOCABULARY):
+        - 4–6 scenes forming a COMPLETE, BELIEVABLE story
+        - Each scene: ONE English sentence (12–20 words for natural flow)
+        - NO semicolons/quotes/ellipses; avoid abrupt transitions
+        - Transition phrases ONLY when needed for clarity ("Then" / "After that" / "Soon")
+        
+        PER-SCENE CHECKLIST:
+        ✓ Does this scene logically follow from the previous one? (cause-effect link)
+        ✓ Is the character's action motivated and realistic?
+        ✓ Does the vocabulary word usage feel NATURAL (not shoehorned)?
+        ✓ Can I visualize this scene clearly? (specific location/action/objects)
+        
+        FINAL VALIDATION:
+        - Read the full story: Does it make sense as a continuous narrative?
+        - Would a 6-year-old understand why each event happens?
+        - Is the ending satisfying (not abrupt or confusing)?
+        - If you had to sacrifice vocabulary coverage for story coherence, prioritize COHERENCE
 
         IMAGE DESCRIPTIONS (FOR GENERATION):
         - Short comma-separated phrase with FIXED order:
             action, setting, lighting (consistent), mood, camera (choose one of: wide establishing | mid-shot | close-up | over-shoulder)
-        - DO NOT include character appearance (it is defined in character_design).
-        - Keep time-of-day and location consistent across all scenes.
+        - DO NOT include character appearance (it is defined in character_design)
+        - Keep time-of-day and location consistent across all scenes
 
         COVERAGE & VALIDATION:
-        - used_words MUST be a subset of TODAY'S VOCABULARY; no invented words.
-        - coverage.missing_words MUST be [] before returning. If not empty, internally rewrite scenes to achieve full coverage, then return.
+        - used_words MUST be a subset of TODAY'S VOCABULARY; no invented words
+        - Aim for 100% coverage BUT prioritize story quality over forced word insertion
+        - If a word truly doesn't fit naturally, it's acceptable to miss 1-2 words rather than break story logic
+        - If coverage.missing_words is not empty, briefly note why those words didn't fit organically
 
         TODAY'S VOCABULARY:
         {words_str}
@@ -138,7 +192,7 @@ async def generate_script(word_data):
         {{
             "character_design": "...",
             "anchor_word": "...",
-            "theme": "≤8 words summary capturing moral or focus",
+            "theme": "≤10 words capturing the story's core message or activity",
             "scenes": [
                 {{
                     "text": "...",
@@ -428,13 +482,10 @@ def draw_text_with_stroke(draw, text, x, y, font, text_color, stroke_color, stro
 
 def load_font(fontsize=40):
     try:
-        # Try absolute path for Windows
-        font_path = "C:/Windows/Fonts/simhei.ttf"
-        if os.path.exists(font_path):
-            return ImageFont.truetype(font_path, fontsize)
+        if os.path.exists(FONT_PATH) or FONT_PATH == "arial.ttf":
+             return ImageFont.truetype(FONT_PATH, fontsize)
         else:
-            # Try generic name
-            return ImageFont.truetype("arial.ttf", fontsize)
+             return ImageFont.load_default()
     except Exception as e:
         print(f"DEBUG: Font loading failed: {e}", file=sys.stderr)
         return ImageFont.load_default()
@@ -473,10 +524,8 @@ def create_static_subtitle_clip(text, translation, duration, video_size, font):
     en_font = font # Already loaded with default size, but we might need to reload for specific sizes if PIL doesn't support scaling
     # Actually PIL ImageFont.truetype loads a specific size. We need to load two fonts.
     try:
-        font_path = "C:/Windows/Fonts/simhei.ttf"
-        if not os.path.exists(font_path): font_path = "arial.ttf"
-        en_font = ImageFont.truetype(font_path, en_fontsize)
-        cn_font = ImageFont.truetype(font_path, cn_fontsize)
+        en_font = ImageFont.truetype(FONT_PATH, en_fontsize)
+        cn_font = ImageFont.truetype(FONT_PATH, cn_fontsize)
     except:
         en_font = ImageFont.load_default()
         cn_font = ImageFont.load_default()
@@ -644,7 +693,7 @@ def split_text_smartly(text, max_chars=45):
                     
     return final_chunks
 
-def create_subtitle_clip(text, translation, duration, video_size=(1280, 720)):
+def create_subtitle_clip(text, translation, duration, video_size=(720, 1280)):
     width, height = video_size
     
     # 1. Smart Sentence Alignment
@@ -719,35 +768,70 @@ def create_video_segment(image_path, audio_path, text_content, translation=""):
         
         img_clip = ImageClip(image_path).set_duration(duration)
         
-        # Ken Burns 效果 (Zoom)
+        # 视频尺寸配置 (竖屏 9:16，完美适配豆包 2048x2048 正方形图片)
+        video_width = 720
+        video_height = 1280
+        
+        # 智能调整图片尺寸以填充画布（避免黑边）
+        # 豆包图片是 2048x2048，缩放到宽度 720 时高度也是 720
+        # 为了填满 1280 高度，需要缩放到高度 1280
+        img_clip = img_clip.resize(height=video_height)
+        
+        # Ken Burns 效果 (温和的缩放，从 1.0 到 1.15，避免过度裁切)
         zoom_direction = random.choice(['in', 'out'])
         
         def zoom_in(t):
-            return 1 + 0.04 * t
+            return 1 + 0.03 * t  # 缩小幅度：从 0.04 改为 0.03
             
         def zoom_out(t):
-            return 1.2 - 0.04 * t
+            return 1.15 - 0.03 * t  # 初始缩放从 1.2 改为 1.15
 
         zoom_func = zoom_in if zoom_direction == 'in' else zoom_out
         
         if zoom_direction == 'out':
-            img_clip = img_clip.resize(1.2)
+            img_clip = img_clip.resize(1.15)  # 从 1.2 改为 1.15
             
         zoomed_clip = img_clip.resize(zoom_func).set_position(('center', 'center'))
         
         # 添加字幕 (使用 PIL 替代 TextClip 以避免 ImageMagick 依赖)
         try:
-            txt_clip = create_subtitle_clip(text_content, translation, duration, video_size=(1280, 720))
-            final_clip = CompositeVideoClip([zoomed_clip, txt_clip], size=(1280, 720))
+            txt_clip = create_subtitle_clip(text_content, translation, duration, video_size=(video_width, video_height))
+            final_clip = CompositeVideoClip([zoomed_clip, txt_clip], size=(video_width, video_height))
         except Exception as e:
             print(f"⚠️ Subtitle generation failed: {e}. Skipping subtitles.", file=sys.stderr)
-            final_clip = CompositeVideoClip([zoomed_clip], size=(1280, 720))
+            final_clip = CompositeVideoClip([zoomed_clip], size=(video_width, video_height))
 
         final_clip = final_clip.set_audio(audio_clip)
         
         return final_clip
     except Exception as e:
         print(f"❌ Error creating segment: {e}", file=sys.stderr)
+        return None
+
+def upload_to_cos(local_path, cos_path):
+    """Upload file to Tencent Cloud COS"""
+    if not (COS_SECRET_ID and COS_SECRET_KEY and COS_BUCKET_NAME):
+        print("⚠️ COS credentials not configured. Skipping upload.", file=sys.stderr)
+        return None
+
+    try:
+        config = CosConfig(Region=COS_REGION, SecretId=COS_SECRET_ID, SecretKey=COS_SECRET_KEY)
+        client = CosS3Client(config)
+        
+        log_progress("uploading", 90, f"Uploading to COS: {cos_path}")
+        
+        response = client.upload_file(
+            Bucket=COS_BUCKET_NAME,
+            LocalFilePath=local_path,
+            Key=cos_path,
+            EnableMD5=False
+        )
+        
+        # Construct URL
+        url = f"https://{COS_BUCKET_NAME}.cos.{COS_REGION}.myqcloud.com/{cos_path}"
+        return url
+    except Exception as e:
+        print(f"❌ COS Upload failed: {e}", file=sys.stderr)
         return None
 
 async def main():
@@ -860,11 +944,35 @@ async def main():
             # 计算相对路径 (相对于 RG_data)
             relative_path = os.path.relpath(output_path, os.path.dirname(STORAGE_PATH))
             
-            log_progress("completed", 100, "Video generation completed", {
+            final_result = {
                 "video_path": output_path,
                 "relative_path": relative_path,
                 "filename": output_filename
-            })
+            }
+
+            # COS Upload Logic
+            if COS_UPLOAD_ENABLED:
+                # Define COS path (e.g., videos/daily/filename.mp4)
+                cos_key = f"videos/daily/{output_filename}"
+                cos_url = upload_to_cos(output_path, cos_key)
+                
+                if cos_url:
+                    final_result["cos_url"] = cos_url
+                    final_result["video_url"] = cos_url # Unified URL field
+                    
+                    # Optional: Delete local file after successful upload
+                    # For now, we keep it unless explicitly told to delete, 
+                    # but the requirement says "delete local files".
+                    # Let's assume we delete it if upload is successful to save space in container.
+                    try:
+                        os.remove(output_path)
+                        final_result["local_deleted"] = True
+                        # Also try to clean up audio/images if needed, but maybe keep them for debug?
+                        # For now just delete the large video file.
+                    except Exception as e:
+                        print(f"⚠️ Failed to delete local file: {e}", file=sys.stderr)
+            
+            log_progress("completed", 100, "Video generation completed", final_result)
             
         except Exception as e:
             log_progress("error", 80, f"Error stitching video: {e}")

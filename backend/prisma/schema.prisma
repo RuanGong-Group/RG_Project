@@ -1,9 +1,3 @@
-// Prisma Schema for 语境记忆背单词软件
-// 数据库：MySQL 8.0
-// 版本：v2.0
-// 日期：2025年11月6日
-// 更新：根据 V2 设计文档，重构单词、词义、学习进度模型，引入 lemma 和 SM-2 算法支持。
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,91 +7,65 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// 用户相关表
-// ============================================
-
 /// 用户表 - 存储用户基本信息
 model User {
-  id                Int       @id @default(autoincrement())
-  username          String    @unique @db.VarChar(255)
-  passwordHash      String    @map("password_hash") @db.VarChar(255)
-  currentBookTagId  Int?      @map("current_book_tag_id")
-  dailyLearningGoal Int       @default(10) @map("daily_learning_goal") // 每日学习目标（单词数）
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-  lastLoginAt       DateTime? @map("last_login_at") @db.Timestamp(0)
-
-  // 关联关系
-  currentBookTag    BookTag?             @relation("UserCurrentBook", fields: [currentBookTagId], references: [id])
+  id                Int                    @id @default(autoincrement())
+  username          String                 @unique @db.VarChar(255)
+  passwordHash      String?                @map("password_hash") @db.VarChar(255)
+  currentBookTagId  Int?                   @map("current_book_tag_id")
+  dailyLearningGoal Int                    @default(10) @map("daily_learning_goal")
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamp(0)
+  lastLoginAt       DateTime?              @map("last_login_at") @db.Timestamp(0)
+  githubId          String?                @unique @map("github_id") @db.VarChar(255)
+  dailyCheckIns     DailyCheckIn[]
+  achievements      UserAchievement[]
+  userBookSettings  UserBookSettings[]
   learningProgress  UserLearningProgress[]
   wordNotebook      UserWordNotebook[]
-  dailyCheckIns     DailyCheckIn[]
-  userBookSettings  UserBookSettings[]
-  achievements      UserAchievement[]
+  currentBookTag    BookTag?               @relation("UserCurrentBook", fields: [currentBookTagId], references: [id])
   videoJobs         VideoGenerationJob[]
 
+  @@index([currentBookTagId], map: "users_current_book_tag_id_fkey")
   @@map("users")
 }
 
-// ============================================
-// 视频生成相关表
-// ============================================
-
 /// 视频生成任务表
 model VideoGenerationJob {
-  id              Int       @id @default(autoincrement())
-  userId          Int       @map("user_id")
-  jobId           String    @unique @map("job_id") @db.VarChar(255) // UUID
-  
-  // 配置信息
-  videoType       String    @map("video_type") @db.VarChar(50) // 'daily_learning', 'daily_review', 'custom'
-  wordIds         Json      @map("word_ids") // 包含的单词ID数组
-  templateType    String    @map("template_type") @db.VarChar(50) // 'mystery', 'scifi', 'daily'
-  
-  // 状态追踪
-  status          String    @default("pending") @db.VarChar(50) // 'pending', 'processing', 'completed', 'failed'
-  progress        Int       @default(0) // 0-100
-  errorMessage    String?   @map("error_message") @db.Text
-  
-  // 结果信息
-  videoPath       String?   @map("video_path") @db.VarChar(500) // 相对路径
-  videoUrl        String?   @map("video_url") @db.VarChar(500)  // 云存储URL
-  duration        Float?    // 视频时长(秒)
-  scenes          Json?     // 场景详情
-  
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-  completedAt     DateTime? @map("completed_at") @db.Timestamp(0)
-  
-  // 关联
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  jobId        String    @unique @map("job_id") @db.VarChar(255)
+  videoType    String    @map("video_type") @db.VarChar(50)
+  wordIds      Json      @map("word_ids")
+  templateType String    @map("template_type") @db.VarChar(50)
+  status       String    @default("pending") @db.VarChar(50)
+  progress     Int       @default(0)
+  errorMessage String?   @map("error_message") @db.Text
+  videoPath    String?   @map("video_path") @db.VarChar(500)
+  videoUrl     String?   @map("video_url") @db.VarChar(500)
+  duration     Float?
+  scenes       Json?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  completedAt  DateTime? @map("completed_at") @db.Timestamp(0)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([jobId])
   @@index([status])
   @@map("video_generation_jobs")
 }
 
-// ============================================
-// 单词数据表 (V2 Structure)
-
-// ============================================
-
 /// 单词基础表 - 存储单词原文、原型和音标
 model Word {
-  id            Int      @id @default(autoincrement())
-  word          String   @unique @db.VarChar(255)
-  pronunciation Json?     @db.Json // JSON格式: {"uk": "/ˈwɜːd/", "us": "/ˈwɝːd/"}
-  lemma         String?  @db.VarChar(255) // 单词原型，如 'went' 的 lemma 是 'go'
-  lemmaId       Int?     @map("lemma_id") // 指向原型单词的ID
-
-  // 关联关系
+  id            Int                @id @default(autoincrement())
+  word          String             @unique @db.VarChar(255)
+  lemma         String?            @db.VarChar(255)
+  lemmaId       Int?               @map("lemma_id")
+  pronunciation Json?
   meanings      Meaning[]
-  bookTags      WordTagRelation[]
   wordNotebook  UserWordNotebook[]
-  
-  // 自引用，用于原型和派生词
-  prototype     Word?    @relation("WordLemmas", fields: [lemmaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  variants      Word[]   @relation("WordLemmas")
+  bookTags      WordTagRelation[]
+  prototype     Word?              @relation("WordLemmas", fields: [lemmaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  variants      Word[]             @relation("WordLemmas")
 
   @@index([word])
   @@index([lemma])
@@ -107,39 +75,31 @@ model Word {
 
 /// 词义表 - 存储详细释义 (V2 Structure, PartOfSpeech merged)
 model Meaning {
-  id              Int       @id @default(autoincrement())
-  wordId          Int       @map("word_id")
-  partOfSpeech    String    @map("part_of_speech") @db.VarChar(50)
-  definition      String    @db.Text
-  extra           Json?     // JSON格式，存储英文定义、标签、音标、助记等
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
-
-  // 关联关系
-  word            Word                      @relation(fields: [wordId], references: [id], onDelete: Cascade)
-  examples        MeaningExampleRelation[]
+  id               Int                      @id @default(autoincrement())
+  wordId           Int                      @map("word_id")
+  partOfSpeech     String                   @map("part_of_speech") @db.VarChar(50)
+  definition       String                   @db.Text
+  extra            Json?
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime                 @updatedAt @map("updated_at") @db.Timestamp(0)
+  examples         MeaningExampleRelation[]
+  word             Word                     @relation(fields: [wordId], references: [id], onDelete: Cascade)
   learningProgress UserLearningProgress[]
 
   @@index([wordId])
   @@map("meanings")
 }
 
-// ============================================
-// 例句相关表 (V2 Structure)
-// ============================================
-
 /// 例句中央池 - 存储所有例句，支持复用
 model ExamplePool {
-  id           Int       @id @default(autoincrement())
-  sentence     String    @db.Text
-  sourceType   String    @map("source_type") @db.VarChar(50) // 'ecdict', 'true_exam', 'ai_generated', 'user_added'
-  sourceDetail String?   @map("source_detail") @db.VarChar(255) // 'CET-4 2023.12 Set 1'
-  translation  String?   @db.Text // 中文翻译
-  embedding    Bytes?    // 句向量
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
-
-  // 关联关系
+  id           Int                      @id @default(autoincrement())
+  sentence     String                   @db.Text
+  sourceType   String                   @map("source_type") @db.VarChar(50)
+  sourceDetail String?                  @map("source_detail") @db.VarChar(255)
+  embedding    Bytes?
+  createdAt    DateTime                 @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt    DateTime                 @updatedAt @map("updated_at") @db.Timestamp(0)
+  translation  String?                  @db.Text
   meanings     MeaningExampleRelation[]
 
   @@index([sourceType])
@@ -148,15 +108,13 @@ model ExamplePool {
 
 /// 词义-例句关联表 - 建立多对多关系
 model MeaningExampleRelation {
-  meaningId      Int     @map("meaning_id")
-  exampleId      Int     @map("example_id")
-  highlightWord  String? @map("highlight_word") @db.VarChar(255)
-  orderInMeaning Int?    @map("order_in_meaning")
-  isPrimary      Boolean @default(false) @map("is_primary") // 是否为该词义的主推例句
-
-  // 关联关系
-  meaning        Meaning     @relation(fields: [meaningId], references: [id], onDelete: Cascade)
+  meaningId      Int         @map("meaning_id")
+  exampleId      Int         @map("example_id")
+  highlightWord  String?     @map("highlight_word") @db.VarChar(255)
+  orderInMeaning Int?        @map("order_in_meaning")
+  isPrimary      Boolean     @default(false) @map("is_primary")
   example        ExamplePool @relation(fields: [exampleId], references: [id], onDelete: Cascade)
+  meaning        Meaning     @relation(fields: [meaningId], references: [id], onDelete: Cascade)
 
   @@id([meaningId, exampleId])
   @@index([meaningId])
@@ -164,21 +122,15 @@ model MeaningExampleRelation {
   @@map("meaning_example_relation")
 }
 
-// ============================================
-// 词书相关表
-// ============================================
-
 /// 词书标签表 - 存储词书名称
 model BookTag {
-  id            Int       @id @default(autoincrement())
-  tagName       String    @unique @map("tag_name") @db.VarChar(255)
-  isUserDefined Boolean   @default(false) @map("is_user_defined")
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-
-  // 关联关系
-  words         WordTagRelation[]
-  users         User[]            @relation("UserCurrentBook")
+  id               Int                @id @default(autoincrement())
+  tagName          String             @unique @map("tag_name") @db.VarChar(255)
+  isUserDefined    Boolean            @default(false) @map("is_user_defined")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamp(0)
   userBookSettings UserBookSettings[]
+  users            User[]             @relation("UserCurrentBook")
+  words            WordTagRelation[]
 
   @@index([tagName])
   @@map("book_tags")
@@ -186,13 +138,11 @@ model BookTag {
 
 /// 单词-标签关联表 - 建立多对多关系
 model WordTagRelation {
-  wordId       Int    @map("word_id")
-  bookTagId    Int    @map("book_tag_id")
-  masteryFocus String @map("mastery_focus") @db.VarChar(50) // 'recognition' 或 'production'
-
-  // 关联关系
-  word         Word    @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  wordId       Int     @map("word_id")
+  bookTagId    Int     @map("book_tag_id")
+  masteryFocus String  @map("mastery_focus") @db.VarChar(50)
   bookTag      BookTag @relation(fields: [bookTagId], references: [id], onDelete: Cascade)
+  word         Word    @relation(fields: [wordId], references: [id], onDelete: Cascade)
 
   @@id([wordId, bookTagId])
   @@index([wordId])
@@ -202,18 +152,16 @@ model WordTagRelation {
 
 /// 用户-词书配置表 - 存储用户在特定词书下的偏好与稳定乱序 salt
 model UserBookSettings {
-  id                 Int      @id @default(autoincrement())
-  userId             Int      @map("user_id")
-  bookTagId          Int      @map("book_tag_id")
-  salt               String   @db.VarChar(255) // 用于稳定乱序的持久化 salt
-  shuffleAlgorithm   String   @default("stable_hash") @map("shuffle_algorithm") @db.VarChar(50) // 'stable_hash' 等
-  preferences        Json?    // 可扩展的用户偏好 JSON
-  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamp(0)
-
-  // 关联关系
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookTag            BookTag  @relation(fields: [bookTagId], references: [id], onDelete: Cascade)
+  id               Int      @id @default(autoincrement())
+  userId           Int      @map("user_id")
+  bookTagId        Int      @map("book_tag_id")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamp(0)
+  preferences      Json?
+  salt             String   @db.VarChar(255)
+  shuffleAlgorithm String   @default("stable_hash") @map("shuffle_algorithm") @db.VarChar(50)
+  bookTag          BookTag  @relation(fields: [bookTagId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, bookTagId])
   @@index([userId])
@@ -221,32 +169,23 @@ model UserBookSettings {
   @@map("user_book_settings")
 }
 
-// ============================================
-// 用户学习相关表 (V2 Structure)
-// ============================================
-
 /// 用户学习进度表 - 记录对每个词义的学习进度（SM-2 算法核心表）
 model UserLearningProgress {
   id                 Int       @id @default(autoincrement())
   userId             Int       @map("user_id")
   meaningId          Int       @map("meaning_id")
-  masteryLevel       Int       @default(0) @map("mastery_level") // 0-5
-  
-  // SM-2 算法核心字段
-  easinessFactor     Float     @default(2.5) @map("easiness_factor") // E-Factor
-  interval           Int       @default(0)   // 复习间隔天数
-  repetitions        Int       @default(0)   // 复习次数
-  
+  masteryLevel       Int       @default(0) @map("mastery_level")
+  easinessFactor     Float     @default(2.5) @map("easiness_factor")
+  interval           Int       @default(0)
+  repetitions        Int       @default(0)
   lastReviewAt       DateTime? @map("last_review_at") @db.Timestamp(0)
   nextReviewAt       DateTime  @map("next_review_at") @db.Timestamp(0)
-  reviewCount        Int       @default(0) @map("review_count") // 总复习次数（兼容旧版）
-  consecutiveCorrect Int       @default(0) @map("consecutive_correct") // 连续正确次数（兼容旧版）
+  reviewCount        Int       @default(0) @map("review_count")
+  consecutiveCorrect Int       @default(0) @map("consecutive_correct")
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
-
-  // 关联关系
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   meaning            Meaning   @relation(fields: [meaningId], references: [id], onDelete: Cascade)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, meaningId])
   @@index([userId])
@@ -257,14 +196,12 @@ model UserLearningProgress {
 
 /// 用户生词本表
 model UserWordNotebook {
-  id       Int      @id @default(autoincrement())
-  userId   Int      @map("user_id")
-  wordId   Int      @map("word_id")
-  addedAt  DateTime @default(now()) @map("added_at") @db.Timestamp(0)
-
-  // 关联关系
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  word     Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  id      Int      @id @default(autoincrement())
+  userId  Int      @map("user_id")
+  wordId  Int      @map("word_id")
+  addedAt DateTime @default(now()) @map("added_at") @db.Timestamp(0)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word    Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
 
   @@unique([userId, wordId])
   @@index([userId])
@@ -274,27 +211,17 @@ model UserWordNotebook {
 
 /// 每日打卡表
 model DailyCheckIn {
-  id              Int      @id @default(autoincrement())
-  userId          Int      @map("user_id")
-  checkInDate     DateTime @map("check_in_date") @db.Date
-  
-  // 学习统计（单词级别，对用户友好）
-  wordsLearned    Int      @default(0) @map("words_learned")    // 今日学习的单词数（去重）
-  wordsReviewed   Int      @default(0) @map("words_reviewed")   // 今日复习的单词数（去重）
-  
-  // 内部统计（词义级别，精确跟踪）
-  meaningsLearned Int      @default(0) @map("meanings_learned") // 今日学习的词义数
-  meaningsReviewed Int     @default(0) @map("meanings_reviewed")// 今日复习的词义数
-  
-  // 目标管理
-  dailyGoal       Int      @default(10) @map("daily_goal")      // 当日学习目标（快照）
-  goalCompleted   Boolean  @default(false) @map("goal_completed")// 是否完成目标
-  
-  // 连续打卡
-  consecutiveDays Int      @default(0) @map("consecutive_days")  // 连续打卡天数
-
-  // 关联关系
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               Int      @id @default(autoincrement())
+  userId           Int      @map("user_id")
+  checkInDate      DateTime @map("check_in_date") @db.Date
+  wordsLearned     Int      @default(0) @map("words_learned")
+  wordsReviewed    Int      @default(0) @map("words_reviewed")
+  meaningsLearned  Int      @default(0) @map("meanings_learned")
+  meaningsReviewed Int      @default(0) @map("meanings_reviewed")
+  dailyGoal        Int      @default(10) @map("daily_goal")
+  goalCompleted    Boolean  @default(false) @map("goal_completed")
+  consecutiveDays  Int      @default(0) @map("consecutive_days")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, checkInDate])
   @@index([userId])
@@ -308,8 +235,6 @@ model UserAchievement {
   userId          Int      @map("user_id")
   achievementName String   @map("achievement_name") @db.VarChar(255)
   awardedAt       DateTime @default(now()) @map("awarded_at") @db.Timestamp(0)
-
-  // 关联关系
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, achievementName])

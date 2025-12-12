@@ -153,7 +153,7 @@ export default function BookDetail() {
 
       <div className="max-w-6xl mx-auto px-4 mt-6 space-y-6">
         {/* 学习统计 */}
-        {stats && (
+        {stats && bookData && (
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold mb-4">📊 当前页面统计 (已加载 {stats.total} 个单词)</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
