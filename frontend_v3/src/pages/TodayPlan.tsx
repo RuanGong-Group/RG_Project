@@ -14,6 +14,7 @@ import DailyGoalCard from './TodayPlan/components/DailyGoalCard';
 import ReviewCard from './TodayPlan/components/ReviewCard';
 import NewLearningCard from './TodayPlan/components/NewLearningCard';
 import ReviewWarningModal from './TodayPlan/components/ReviewWarningModal';
+import CheckInCalendar from '../components/CheckInCalendar';
 
 export default function TodayPlan() {
   const navigate = useNavigate();
@@ -324,6 +325,9 @@ export default function TodayPlan() {
             </button>
           </div>
         )}
+
+        {/* 打卡日历 */}
+        <CheckInCalendar />
 
         <DailyGoalCard plan={plan} />        <ReviewCard plan={plan} />
 

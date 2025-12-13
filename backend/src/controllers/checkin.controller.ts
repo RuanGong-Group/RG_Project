@@ -8,6 +8,8 @@ import prisma from '../utils/prisma';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { getBeijingToday, getBeijingYesterday, getBeijingDaysAgo } from '../utils/datetime';
 import { logCriticalError } from '../utils/logger';
+import { checkCheckinAchievements, checkLearningAchievements, getUserLearningStats } from '../services/achievement.service';
+import type { AchievementDefinition } from '../config/achievements';
 
 /**
  * 获取今日打卡状态
@@ -207,6 +209,8 @@ export const getCheckInHistory = async (req: AuthRequest, res: Response): Promis
  * - wordsLearned/wordsReviewed: 单词级别计数，用于目标判定和用户展示
  * - meaningsLearned/meaningsReviewed: 词义级别计数，用于精确跟踪
  * - goalCompleted: 严格模式判定（wordsLearned >= dailyGoal）
+ * 
+ * @returns 新获得的成就列表（如果有）
  */
 export const updateTodayCheckIn = async (
   userId: number,
@@ -216,7 +220,9 @@ export const updateTodayCheckIn = async (
     meaningId?: number;
     meaningCount?: number; // 该单词的总词义数
   }
-): Promise<void> => {
+): Promise<AchievementDefinition[]> => {
+  const newAchievements: AchievementDefinition[] = [];
+  
   try {
     // 获取今日日期（北京时间）
     const today = getBeijingToday();
@@ -334,8 +340,34 @@ export const updateTodayCheckIn = async (
             }
           });
         }
+
+        // 🎉 成就检测：打卡相关成就
+        if (type === 'learn') {  // 只在学习新词时触发打卡成就检测
+          const stats = await getUserLearningStats(userId);
+          const achievementResult = await checkCheckinAchievements(
+            userId,
+            stats.currentConsecutiveDays,
+            stats.totalCheckInDays,
+            goalCompleted
+          );
+          if (achievementResult.hasNew) {
+            newAchievements.push(...achievementResult.newAchievements);
+          }
+
+          // 🎉 成就检测：学习相关成就
+          const learningResult = await checkLearningAchievements(
+            userId,
+            stats.totalWordsLearned,
+            stats.totalWordsReviewed
+          );
+          if (learningResult.hasNew) {
+            newAchievements.push(...learningResult.newAchievements);
+          }
+        }
       }
     }
+
+    return newAchievements;
   } catch (error) {
     // 🚨 关键错误：打卡失败会导致统计数据丢失
     logCriticalError(
@@ -358,6 +390,8 @@ export const updateTodayCheckIn = async (
     // 
     // 当前策略：详细记录日志，不阻断主流程
     // 原因：学习/复习成功比打卡记录更重要，避免影响用户体验
+    
+    return [];  // 返回空数组，不影响主流程
   }
 };
 
@@ -395,3 +429,137 @@ async function calculateConsecutiveDays(userId: number, _dailyGoal: number): Pro
     return 1;
   }
 }
+
+/**
+ * 获取指定月份的打卡日历
+ * GET /api/checkin/calendar/:year/:month
+ * 
+ * 返回数据：
+ * - 当月每天的打卡记录
+ * - 每天的学习数据和成就图标
+ */
+export const getCheckInCalendar = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: '用户未认证'
+      });
+      return;
+    }
+
+    const year = parseInt(req.params.year);
+    const month = parseInt(req.params.month); // 1-12
+
+    if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+      res.status(400).json({
+        success: false,
+        message: '无效的年月参数'
+      });
+      return;
+    }
+
+    // 计算当月的起始和结束日期
+    const startDate = new Date(Date.UTC(year, month - 1, 1)); // UTC时间，但会转成数据库日期
+    const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59)); // 当月最后一天
+
+    // 查询当月的所有打卡记录
+    const checkIns = await prisma.dailyCheckIn.findMany({
+      where: {
+        userId: userId,
+        checkInDate: {
+          gte: startDate,
+          lte: endDate
+        }
+      },
+      orderBy: {
+        checkInDate: 'asc'
+      }
+    });
+
+    // 获取用户成就（用于判断哪天获得了特殊成就）
+    const achievements = await prisma.userAchievement.findMany({
+      where: {
+        userId: userId,
+        awardedAt: {
+          gte: startDate,
+          lte: endDate
+        }
+      },
+      orderBy: {
+        awardedAt: 'asc'
+      }
+    });
+
+    // 构建日历数据（将打卡记录和成就合并到每一天）
+    const calendarDays = checkIns.map(checkIn => {
+      const dateStr = checkIn.checkInDate.toISOString().split('T')[0];
+      
+      // 查找当天获得的成就
+      const dayAchievements = achievements.filter(a => {
+        const awardDateStr = a.awardedAt.toISOString().split('T')[0];
+        return awardDateStr === dateStr;
+      });
+
+      // 确定显示的图标（优先级：特殊成就 > 普通打卡）
+      let displayIcon = '✅'; // 默认普通打卡
+      let achievementKeys: string[] = [];
+
+      if (dayAchievements.length > 0) {
+        achievementKeys = dayAchievements.map(a => a.achievementKey);
+        // 根据优先级选择图标（这里简单处理：取第一个特殊成就）
+        // 可以根据 achievements.ts 中的 priority 字段优化
+        const priorityMap: Record<string, { icon: string; priority: number }> = {
+          'total_100_days': { icon: '🏆', priority: 1 },
+          'streak_30_days': { icon: '💪', priority: 2 },
+          'streak_7_days': { icon: '🔥', priority: 3 },
+          'learn_1000_words': { icon: '🎓', priority: 1 },
+          'learn_100_words': { icon: '📖', priority: 4 },
+          'review_500_words': { icon: '🔁', priority: 4 },
+          'first_checkin': { icon: '🎯', priority: 5 },
+          'daily_goal_complete': { icon: '⚡', priority: 6 },
+          'first_word': { icon: '🌱', priority: 7 },
+          'perfect_session': { icon: '💯', priority: 6 }
+        };
+
+        let highestPriority = 999;
+        for (const key of achievementKeys) {
+          const item = priorityMap[key];
+          if (item && item.priority < highestPriority) {
+            highestPriority = item.priority;
+            displayIcon = item.icon;
+          }
+        }
+      }
+
+      return {
+        date: dateStr,
+        wordsLearned: checkIn.wordsLearned,
+        wordsReviewed: checkIn.wordsReviewed,
+        goalCompleted: checkIn.goalCompleted,
+        consecutiveDays: checkIn.consecutiveDays,
+        icon: displayIcon,
+        achievements: achievementKeys
+      };
+    });
+
+    res.json({
+      success: true,
+      message: '获取打卡日历成功',
+      data: {
+        year,
+        month,
+        days: calendarDays
+      }
+    });
+  } catch (error) {
+    console.error('获取打卡日历失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取打卡日历失败'
+    });
+  }
+};
+
