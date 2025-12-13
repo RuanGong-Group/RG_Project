@@ -225,7 +225,12 @@ export async function makeQuestionForMeaning(meaningId: number) {
   // Get target meaning from database
   const targetMeaning = await prisma.meaning.findUnique({
     where: { id: meaningId },
-    select: { definition: true, wordId: true }
+    select: { 
+      definition: true, 
+      wordId: true, 
+      partOfSpeech: true,  // ← 新增：获取词性
+      extra: true          // ← 新增：获取扩展信息（同义词等）
+    }
   });
 
   if (!targetMeaning) {
@@ -234,28 +239,74 @@ export async function makeQuestionForMeaning(meaningId: number) {
 
   const correctText = targetMeaning.definition;
 
-  // Get distractor meanings from database (different word, avoid confusion)
+  // 改进策略：优先从同词性的词义中选择干扰项
+  // 从更大的池子中随机选择，提高随机性和混淆度
   const distractors = await prisma.meaning.findMany({
     where: {
       id: { not: meaningId },
-      wordId: { not: targetMeaning.wordId }
+      wordId: { not: targetMeaning.wordId },
+      partOfSpeech: targetMeaning.partOfSpeech  // ← 核心改进：限制为同词性
     },
     select: { definition: true },
-    take: 15
+    take: 50  // ← 改进：取50个候选（而不是15个），提高随机性
   });
 
-  const options = [correctText];
-  for (const d of distractors) {
-    if (options.length >= 4) break;
-    if (d.definition !== correctText) options.push(d.definition);
+  // 如果同词性的干扰项不足3个，降级为不限词性
+  if (distractors.length < 3) {
+    console.warn(`[makeQuestion] 词义 ${meaningId} 的同词性干扰项不足，降级为不限词性`);
+    const fallbackDistractors = await prisma.meaning.findMany({
+      where: {
+        id: { not: meaningId },
+        wordId: { not: targetMeaning.wordId }
+      },
+      select: { definition: true },
+      take: 50
+    });
+    
+    // 从候选中随机选3个
+    const shuffled = fallbackDistractors.sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, 3).map(d => d.definition);
+    
+    // 组合并打乱选项
+    const allOptions = [correctText, ...selected];
+    for (let i = allOptions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allOptions[i], allOptions[j]] = [allOptions[j], allOptions[i]];
+    }
+    
+    const opts = allOptions.map((t, idx) => ({ id: idx + 1, text: t }));
+    return { questionId: randomUUID(), options: opts, prompt: '请选择正确含义', timeLimitSec: 5, correctText };
   }
 
-  // Shuffle options
-  for (let i = options.length - 1; i > 0; i--) {
+  // 从50个同词性候选中随机选3个作为干扰项
+  const shuffled = distractors.sort(() => Math.random() - 0.5);
+  
+  // 确保不选择与正确答案重复的选项
+  const selected: string[] = [];
+  for (const d of shuffled) {
+    if (selected.length >= 3) break;
+    if (d.definition !== correctText && !selected.includes(d.definition)) {
+      selected.push(d.definition);
+    }
+  }
+  
+  // 如果不足3个，继续添加（避免极端情况）
+  while (selected.length < 3 && selected.length < shuffled.length) {
+    const candidate = shuffled[selected.length].definition;
+    if (!selected.includes(candidate) && candidate !== correctText) {
+      selected.push(candidate);
+    }
+  }
+
+  // 组合正确答案和干扰项
+  const allOptions = [correctText, ...selected];
+  
+  // 打乱所有选项（Fisher-Yates shuffle）
+  for (let i = allOptions.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [options[i], options[j]] = [options[j], options[i]];
+    [allOptions[i], allOptions[j]] = [allOptions[j], allOptions[i]];
   }
 
-  const opts = options.map((t, idx) => ({ id: idx + 1, text: t }));
+  const opts = allOptions.map((t, idx) => ({ id: idx + 1, text: t }));
   return { questionId: randomUUID(), options: opts, prompt: '请选择正确含义', timeLimitSec: 5, correctText };
 }
