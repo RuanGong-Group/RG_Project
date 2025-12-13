@@ -14,6 +14,9 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from qcloud_cos import CosConfig
 from qcloud_cos import CosS3Client
+from tencentcloud.common import credential
+from tencentcloud.tts.v20190823 import tts_client, models as tts_models
+import base64
 
 # Numpy compatibility for moviepy 1.0.3
 if not hasattr(np, 'int'):
@@ -50,6 +53,11 @@ COS_SECRET_KEY = os.getenv("COS_SECRET_KEY")
 COS_REGION = os.getenv("COS_REGION", "ap-guangzhou")
 COS_BUCKET_NAME = os.getenv("COS_BUCKET_NAME")
 COS_UPLOAD_ENABLED = os.getenv("COS_UPLOAD_ENABLED", "false").lower() == "true"
+
+# Tencent Cloud TTS Configuration (复用 COS 密钥或单独配置)
+TTS_SECRET_ID = os.getenv("TTS_SECRET_ID") or COS_SECRET_ID
+TTS_SECRET_KEY = os.getenv("TTS_SECRET_KEY") or COS_SECRET_KEY
+TTS_ENABLED = os.getenv("TTS_ENABLED", "true").lower() == "true"  # 默认启用
 
 # Font Configuration
 # Use relative path from backend/assets/fonts
@@ -249,35 +257,64 @@ async def generate_script(word_data):
         return None
 
 async def generate_audio(text, output_filename):
-    """使用 gTTS 生成语音 (Online) with pyttsx3 fallback"""
-    # log_progress("generating_audio", 0, f"Generating audio for: {text[:20]}...") # Avoid spamming logs
+    """使用腾讯云 TTS 生成高质量语音，降级方案：gTTS -> pyttsx3"""
     output_path = os.path.join(DIRS["audio"], output_filename)
     
+    # 优先尝试腾讯云 TTS（国内最佳选择）
+    if TTS_ENABLED and TTS_SECRET_ID and TTS_SECRET_KEY:
+        try:
+            cred = credential.Credential(TTS_SECRET_ID, TTS_SECRET_KEY)
+            client = tts_client.TtsClient(cred, "ap-guangzhou")
+            
+            req = tts_models.TextToVoiceRequest()
+            req.Text = text
+            req.SessionId = output_filename.replace('.mp3', '')
+            req.VoiceType = 1002  # 英文女声（Aida）自然流畅
+            req.Codec = "mp3"
+            req.SampleRate = 16000
+            req.Speed = 0  # 正常语速
+            req.Volume = 5  # 音量（0-10）
+            
+            resp = client.TextToVoice(req)
+            audio_data = base64.b64decode(resp.Audio)
+            
+            with open(output_path, 'wb') as f:
+                f.write(audio_data)
+            
+            print(f"✅ Tencent TTS succeeded for: {text[:30]}...", file=sys.stderr)
+            return output_path
+            
+        except Exception as e:
+            print(f"⚠️ Tencent TTS failed: {e}. Trying gTTS fallback...", file=sys.stderr)
+    
+    # 降级方案1：gTTS (需要翻墙)
     try:
-        # 尝试 gTTS (Google TTS)
         tts = gTTS(text=text, lang='en', tld='us')
         tts.save(output_path)
+        print(f"✅ gTTS succeeded", file=sys.stderr)
         return output_path
     except Exception as e:
         print(f"❌ gTTS failed: {e}. Trying pyttsx3 fallback...", file=sys.stderr)
+    
+    # 降级方案2：pyttsx3 + eSpeak（质量最差但稳定）
+    try:
+        engine = pyttsx3.init()
+        engine.setProperty('rate', 150)
+        engine.setProperty('volume', 0.9)
         
-        try:
-            engine = pyttsx3.init()
-            engine.setProperty('rate', 150)
-            engine.setProperty('volume', 0.9)
-            
-            voices = engine.getProperty('voices')
-            for v in voices:
-                if "zira" in v.name.lower() or "female" in v.name.lower():
-                    engine.setProperty('voice', v.id)
-                    break
-            
-            engine.save_to_file(text, output_path)
-            engine.runAndWait()
-            return output_path
-        except Exception as e2:
-            print(f"❌ pyttsx3 failed: {e2}", file=sys.stderr)
-            return None
+        voices = engine.getProperty('voices')
+        for v in voices:
+            if "english" in v.name.lower():
+                engine.setProperty('voice', v.id)
+                break
+        
+        engine.save_to_file(text, output_path)
+        engine.runAndWait()
+        print(f"✅ pyttsx3 succeeded", file=sys.stderr)
+        return output_path
+    except Exception as e2:
+        print(f"❌ pyttsx3 failed: {e2}", file=sys.stderr)
+        return None
 
 def generate_image(image_desc, output_filename):
     """单张图片生成(用于组图不足的降级补齐)"""

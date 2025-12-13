@@ -8,4 +8,5 @@ pyyaml
 Pillow
 numpy
 cos-python-sdk-v5
+tencentcloud-sdk-python
 
