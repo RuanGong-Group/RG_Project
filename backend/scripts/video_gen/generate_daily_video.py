@@ -260,32 +260,43 @@ async def generate_audio(text, output_filename):
     """使用腾讯云 TTS 生成高质量语音，降级方案：gTTS -> pyttsx3"""
     output_path = os.path.join(DIRS["audio"], output_filename)
     
-    # 优先尝试腾讯云 TTS（国内最佳选择）
+    # 优先尝试腾讯云大模型 TTS（适配免费大模型资源包）
     if TTS_ENABLED and TTS_SECRET_ID and TTS_SECRET_KEY:
-        try:
-            cred = credential.Credential(TTS_SECRET_ID, TTS_SECRET_KEY)
-            client = tts_client.TtsClient(cred, "ap-guangzhou")
-            
-            req = tts_models.TextToVoiceRequest()
-            req.Text = text
-            req.SessionId = output_filename.replace('.mp3', '')
-            req.VoiceType = 1002  # 英文女声（Aida）自然流畅
-            req.Codec = "mp3"
-            req.SampleRate = 16000
-            req.Speed = 0  # 正常语速
-            req.Volume = 5  # 音量（0-10）
-            
-            resp = client.TextToVoice(req)
-            audio_data = base64.b64decode(resp.Audio)
-            
-            with open(output_path, 'wb') as f:
-                f.write(audio_data)
-            
-            print(f"✅ Tencent TTS succeeded for: {text[:30]}...", file=sys.stderr)
-            return output_path
-            
-        except Exception as e:
-            print(f"⚠️ Tencent TTS failed: {e}. Trying gTTS fallback...", file=sys.stderr)
+        # 使用大模型音色（与免费资源包匹配）
+        # 文档：https://cloud.tencent.com/document/product/1073/92668
+        voice_types = [
+            (501009, "WeWinny"),  # 英文女声WeWinny（大模型）
+        ]
+        
+        for voice_id, voice_name in voice_types:
+            try:
+                cred = credential.Credential(TTS_SECRET_ID, TTS_SECRET_KEY)
+                client = tts_client.TtsClient(cred, "ap-guangzhou")
+                
+                req = tts_models.TextToVoiceRequest()
+                req.Text = text
+                req.SessionId = output_filename.replace('.mp3', '')
+                req.VoiceType = voice_id  # 使用大模型音色ID
+                req.Codec = "mp3"
+                req.SampleRate = 16000
+                req.Speed = 0  # 正常语速
+                req.Volume = 5  # 音量（0-10）
+                
+                resp = client.TextToVoice(req)
+                audio_data = base64.b64decode(resp.Audio)
+                
+                with open(output_path, 'wb') as f:
+                    f.write(audio_data)
+                
+                print(f"✅ Tencent TTS (AI Model) succeeded with {voice_name} ({voice_id})", file=sys.stderr)
+                return output_path
+                
+            except Exception as e:
+                error_msg = str(e)
+                print(f"⚠️ Tencent TTS error with {voice_name} ({voice_id}): {error_msg}", file=sys.stderr)
+                continue  # 尝试下一个音色
+        
+        print(f"⚠️ All Tencent TTS AI voices failed. Trying gTTS fallback...", file=sys.stderr)
     
     # 降级方案1：gTTS (需要翻墙)
     try:
