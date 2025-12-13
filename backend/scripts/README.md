@@ -223,7 +223,27 @@ npx ts-node scripts/data-quality-audit.ts
 | 数据库诊断 | 3个 | 快速检查数据库状态 ⭐ v3.2新增 |
 | API文档 | 1个 | 自动生成文档 |
 | 文档 | 1个 | 本README |
-| **总计** | **13个** | 精简高效 |
+| 视频生成 | 1个 | 每日视频生成 (Python) |
+| **总计** | **14个** | 精简高效 |
+
+---
+
+## 🎬 视频生成脚本
+
+### `video_gen/generate_daily_video.py`
+**每日单词视频生成**
+
+该脚本负责生成包含单词讲解、例句朗读和配图的短视频。
+
+**关键配置 (Tencent Cloud TTS)**:
+- **TTS 引擎**: 腾讯云语音合成 (Tencent Cloud TTS)
+- **音色 ID**: `501009` (WeWinny - 英文女声大模型音色)
+- **配置位置**: `backend/scripts/video_gen/generate_daily_video.py`
+- **环境变量**: 需要在 `.env` 中配置 `TTS_SECRET_ID` 和 `TTS_SECRET_KEY`。
+
+**注意**:
+- 该音色属于腾讯云"大模型语音合成"资源包，与标准 TTS 资源包不通用。
+- 若遇到 `UnsupportedOperation.PkgExhausted` 错误，请检查是否购买了正确的资源包或音色 ID 是否正确。
 
 ---
 
