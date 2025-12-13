@@ -231,13 +231,13 @@ model DailyCheckIn {
 
 /// 用户成就表
 model UserAchievement {
-  id              Int      @id @default(autoincrement())
-  userId          Int      @map("user_id")
-  achievementName String   @map("achievement_name") @db.VarChar(255)
-  awardedAt       DateTime @default(now()) @map("awarded_at") @db.Timestamp(0)
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             Int      @id @default(autoincrement())
+  userId         Int      @map("user_id")
+  achievementKey String   @map("achievement_key") @db.VarChar(50)
+  awardedAt      DateTime @default(now()) @map("awarded_at") @db.Timestamp(0)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, achievementName])
+  @@unique([userId, achievementKey])
   @@index([userId])
   @@map("user_achievements")
 }

@@ -9,6 +9,7 @@ import notebookRoutes from './routes/notebook.routes';
 import statsRoutes from './routes/stats.routes';
 import checkinRoutes from './routes/checkin.routes';
 import videoRoutes from './routes/video.routes';
+import achievementRoutes from './routes/achievement.routes';
 import commonRoutes from './routes/common.routes';
 import prisma from './utils/prisma';
 import { errorHandler } from './middleware/error.middleware';
@@ -56,6 +57,7 @@ app.use('/api/books', bookRoutes);
 app.use('/api/notebook', notebookRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/checkin', checkinRoutes);
+app.use('/api/achievements', achievementRoutes);  // 成就系统路由
 app.use('/api/video', videoRoutes);
 
 // 健康检查路由

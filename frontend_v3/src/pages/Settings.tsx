@@ -12,6 +12,17 @@ interface Book {
   isUserDefined: boolean;
 }
 
+interface Achievement {
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: 'checkin' | 'learning';
+  priority: number;
+  unlocked: boolean;
+  unlockedAt: string | null;
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   
@@ -20,6 +31,8 @@ export default function Settings() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
   const [selectedBookId, setSelectedBookId] = useState<number>(0);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [achievementStats, setAchievementStats] = useState({ total: 0, unlocked: 0, progress: 0 });
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -47,11 +60,12 @@ export default function Settings() {
 
       const headers = { Authorization: `Bearer ${token}` };
 
-      // 并行请求所有数据
-      const [goalRes, bookRes, booksRes] = await Promise.all([
+      // 并行请求所有数据（增加成就数据）
+      const [goalRes, bookRes, booksRes, achievementsRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/user/settings/daily-goal`, { headers }),
         axios.get(`${API_BASE_URL}/user/current-book`, { headers }),
-        axios.get(`${API_BASE_URL}/books`, { headers })
+        axios.get(`${API_BASE_URL}/books`, { headers }),
+        axios.get(`${API_BASE_URL}/achievements`, { headers }).catch(() => ({ data: { success: false } })) // 容错处理
       ]);
 
       // 设置用户名和每日目标
@@ -69,6 +83,12 @@ export default function Settings() {
       // 设置词书列表
       if (booksRes.data.success) {
         setBooks(booksRes.data.data);
+      }
+
+      // 设置成就数据
+      if (achievementsRes.data.success) {
+        setAchievements(achievementsRes.data.data.achievements || []);
+        setAchievementStats(achievementsRes.data.data.stats || { total: 0, unlocked: 0, progress: 0 });
       }
 
     } catch (err: any) {
@@ -291,6 +311,108 @@ export default function Settings() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* 成就墙卡片 */}
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">🏆 我的成就</h2>
+          
+          {/* 进度条 */}
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-gray-600">
+                已解锁 {achievementStats.unlocked} / {achievementStats.total}
+              </span>
+              <span className="text-sm font-bold text-amber-600">
+                {achievementStats.progress}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-amber-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${achievementStats.progress}%` }}
+              ></div>
+            </div>
+          </div>
+
+          {/* 成就列表 */}
+          {achievements.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              开始学习以解锁成就！
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* 打卡类成就 */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-700 mb-2">📅 打卡成就</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {achievements.filter(a => a.category === 'checkin').map(achievement => (
+                    <div
+                      key={achievement.key}
+                      className={`
+                        p-3 rounded-lg border-2 transition-all
+                        ${achievement.unlocked 
+                          ? 'bg-amber-50 border-amber-300 hover:shadow-md' 
+                          : 'bg-gray-50 border-gray-200 opacity-50'
+                        }
+                      `}
+                      title={achievement.description}
+                    >
+                      <div className="text-3xl mb-1 text-center">{achievement.icon}</div>
+                      <div className="text-sm font-medium text-gray-900 text-center">
+                        {achievement.name}
+                      </div>
+                      {achievement.unlocked && achievement.unlockedAt && (
+                        <div className="text-xs text-gray-500 text-center mt-1">
+                          {new Date(achievement.unlockedAt).toLocaleDateString('zh-CN')}
+                        </div>
+                      )}
+                      {!achievement.unlocked && (
+                        <div className="text-xs text-gray-400 text-center mt-1">
+                          未解锁
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 学习类成就 */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-700 mb-2">📚 学习成就</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {achievements.filter(a => a.category === 'learning').map(achievement => (
+                    <div
+                      key={achievement.key}
+                      className={`
+                        p-3 rounded-lg border-2 transition-all
+                        ${achievement.unlocked 
+                          ? 'bg-blue-50 border-blue-300 hover:shadow-md' 
+                          : 'bg-gray-50 border-gray-200 opacity-50'
+                        }
+                      `}
+                      title={achievement.description}
+                    >
+                      <div className="text-3xl mb-1 text-center">{achievement.icon}</div>
+                      <div className="text-sm font-medium text-gray-900 text-center">
+                        {achievement.name}
+                      </div>
+                      {achievement.unlocked && achievement.unlockedAt && (
+                        <div className="text-xs text-gray-500 text-center mt-1">
+                          {new Date(achievement.unlockedAt).toLocaleDateString('zh-CN')}
+                        </div>
+                      )}
+                      {!achievement.unlocked && (
+                        <div className="text-xs text-gray-400 text-center mt-1">
+                          未解锁
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
