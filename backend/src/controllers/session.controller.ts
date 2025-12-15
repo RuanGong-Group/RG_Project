@@ -225,6 +225,13 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
     const session = SessionService.sessionStore.get(sessionId);
     if (!session) return res.status(404).json({ success: false, message: 'Session 未找到' });
 
+    // 安全检查：确保 Session 属于当前用户
+    const userId = req.user?.userId;
+    if (session.userId !== userId) {
+      console.warn(`⚠️ Security Alert: User ${userId} tried to access session ${sessionId} belonging to User ${session.userId}`);
+      return res.status(403).json({ success: false, message: '无权访问此 Session' });
+    }
+
     if (action === 'choosePath') {
       const pathChoice = payload && payload.path;
       session.lastPath = pathChoice;
@@ -742,6 +749,13 @@ export const getSessionState = async (req: AuthRequest, res: Response) => {
     const sessionId = req.params.sessionId;
     const session = SessionService.sessionStore.get(sessionId);
     if (!session) return res.status(404).json({ success: false, message: 'Session 未找到' });
+
+    // 安全检查：确保 Session 属于当前用户
+    const userId = req.user?.userId;
+    if (session.userId !== userId) {
+      return res.status(403).json({ success: false, message: '无权访问此 Session' });
+    }
+
     return res.json({ success: true, data: { sessionId: session.id, state: session.state, currentStep: session.step, queueSummary: { boosterPending: session.boosters.length, reviewsPending: 0, newPending: 0 } } });
   } catch (error) {
     console.error('getSessionState error', error);
@@ -755,6 +769,13 @@ export const getNextQuestions = async (req: AuthRequest, res: Response) => {
     const sessionId = req.params.sessionId;
     const session = SessionService.sessionStore.get(sessionId);
     if (!session) return res.status(404).json({ success: false, message: 'Session 未找到' });
+
+    // 安全检查：确保 Session 属于当前用户
+    const userId = req.user?.userId;
+    if (session.userId !== userId) {
+      return res.status(403).json({ success: false, message: '无权访问此 Session' });
+    }
+
     const count = parseInt(req.query.count as string) || 3;
     
     // 重要：每次调用 getNextQuestions 时推进步骤，检查 Booster 是否到期
