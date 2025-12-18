@@ -23,6 +23,21 @@ const getSafeSentence = (exampleObj: any): string => {
   return String(s);
 };
 
+// Helper to extract Chinese from definition (consistent with session.service.ts)
+const extractChinese = (text: string): string => {
+  if (!text) return '';
+  // 尝试按分号分割
+  const parts = text.split(/;|；/);
+  // 优先返回包含中文的部分
+  for (const part of parts) {
+    if (/[\u4e00-\u9fa5]/.test(part)) {
+      return part.trim();
+    }
+  }
+  // 如果没有中文，返回原文本
+  return text;
+};
+
 export const startSession = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId || 1;
@@ -407,12 +422,13 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
       // 如果前端传了 selectedOptionText，直接比对定义
       let isCorrect = false;
       if (selectedOptionText) {
-        isCorrect = selectedOptionText === m.definition;
+        // 修复：比对提取出的中文释义，而不是完整释义
+        isCorrect = selectedOptionText === extractChinese(m.definition);
       } else {
         // 兼容旧逻辑（不推荐，仍有随机性 Bug）
         const q = await SessionService.makeQuestionForMeaning(meaningId);
         const selected = q.options.find((o: any) => o.id === selectedOptionId);
-        isCorrect = !!(selected && selected.text === m.definition);
+        isCorrect = !!(selected && selected.text === extractChinese(m.definition));
       }
 
       const meaningKey = `meaning:${m.id}`;

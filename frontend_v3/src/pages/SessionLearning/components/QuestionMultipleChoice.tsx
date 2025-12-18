@@ -1,5 +1,6 @@
 import { learningSessionApi } from '../../../services/api';
 import type { SessionResponse } from '../../../types/api';
+import { parseDefinition } from '../../../utils/text';
 
 interface QuestionMultipleChoiceProps {
   sessionResp: SessionResponse;
@@ -117,14 +118,21 @@ export default function QuestionMultipleChoice({
     <div className="bg-white rounded-lg p-6 md:p-8 shadow-sm border-2 border-gray-200">
       <h3 className="text-lg md:text-xl font-semibold mb-6 text-center text-gray-800">{q.prompt}</h3>
       <div className="space-y-3">
-        {q.options.map((opt: any, idx: number) => (
-          <button
-            key={opt.id}
-            disabled={continueLoading}
-            className={`w-full text-left p-4 text-sm md:text-base border-2 rounded-lg transition-all hover:shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${optionStyle}`}
-            onClick={() => handleOptionClick(opt)}
-          >{String.fromCharCode(65+idx)}. {opt.text}</button>
-        ))}
+        {q.options.map((opt: any, idx: number) => {
+          const { en, cn } = parseDefinition(opt.text);
+          return (
+            <button
+              key={opt.id}
+              disabled={continueLoading}
+              className={`w-full text-left p-4 text-sm md:text-base border-2 rounded-lg transition-all hover:shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${optionStyle}`}
+              onClick={() => handleOptionClick(opt)}
+            >
+              <span className="font-bold mr-2">{String.fromCharCode(65+idx)}.</span>
+              <span className="font-medium">{en}</span>
+              {cn && <span className="block text-gray-500 text-sm mt-1 ml-6">{cn}</span>}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

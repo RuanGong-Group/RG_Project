@@ -891,9 +891,13 @@ async def main():
     args = parser.parse_args()
     
     try:
-        words_data = json.loads(args.words)
-    except json.JSONDecodeError:
-        log_progress("error", 0, "Invalid JSON format for --words")
+        # Fix for Windows cmd quoting issues:
+        # If the string starts with a single quote (which cmd might pass through), strip it.
+        # Also handle potential double-quote escaping issues.
+        raw_words = args.words.strip("'")
+        words_data = json.loads(raw_words)
+    except json.JSONDecodeError as e:
+        log_progress("error", 0, f"Invalid JSON format for --words: {str(e)}. Raw input: {args.words}")
         sys.exit(1)
 
     job_id = args.jobId
@@ -934,17 +938,26 @@ async def main():
     
     log_progress("images_generated", 60, f"All {len(image_paths)} images generated successfully")
     
-    # 3. 为每个场景生成音频并组装视频片段
+    # 3. 并行生成所有音频
+    log_progress("generating_audio", 60, f"Generating audio for {len(scenes)} scenes in parallel...")
+    
+    audio_tasks = []
+    for i, scene in enumerate(scenes):
+        audio_filename = f"{job_id}_audio_{i}.mp3"
+        audio_tasks.append(generate_audio(scene['text'], audio_filename))
+    
+    # 并发执行所有音频生成任务
+    audio_paths = await asyncio.gather(*audio_tasks)
+    
+    # 4. 组装视频片段
     video_clips = []
     total_scenes = len(scenes)
     
     for i, scene in enumerate(scenes):
-        progress = 60 + int((i / total_scenes) * 20) # 60% -> 80%
-        log_progress("processing_scene", progress, f"Processing Scene {i+1}/{total_scenes}")
+        progress = 70 + int((i / total_scenes) * 10) # 70% -> 80%
+        log_progress("processing_scene", progress, f"Compositing Scene {i+1}/{total_scenes}")
         
-        # 生成音频
-        audio_filename = f"{job_id}_audio_{i}.mp3"
-        audio_path = await generate_audio(scene['text'], audio_filename)
+        audio_path = audio_paths[i]
         if not audio_path: 
             print(f"⚠️ Audio generation failed for scene {i+1}, skipping", file=sys.stderr)
             continue

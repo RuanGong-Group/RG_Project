@@ -238,7 +238,60 @@ export async function makeQuestionForMeaning(meaningId: number) {
   }
 
   const correctText = targetMeaning.definition;
+  
+  // 辅助函数：提取中文释义
+  const extractChinese = (text: string): string => {
+    // 尝试按分号分割
+    const parts = text.split(/;|；/);
+    // 优先返回包含中文的部分
+    for (const part of parts) {
+      if (/[\u4e00-\u9fa5]/.test(part)) {
+        return part.trim();
+      }
+    }
+    // 如果没有中文，尝试返回非英文部分（这里简化为返回原文本）
+    // 或者如果只有英文，就返回英文
+    return text;
+  };
 
+  // 转换正确答案为中文
+  const correctTextCn = extractChinese(correctText);
+
+  // 1. 优先使用预生成的权威混淆项 (High-Quality Distractors)
+  const extra = targetMeaning.extra as any;
+  if (extra?.distractors?.en && extra?.distractors?.cn && 
+      Array.isArray(extra.distractors.en) && Array.isArray(extra.distractors.cn)) {
+    
+    const enList = extra.distractors.en;
+    const cnList = extra.distractors.cn;
+    const count = Math.min(enList.length, cnList.length);
+    const hqDistractors: string[] = [];
+    
+    for (let i = 0; i < count; i++) {
+      // 仅使用中文混淆项
+      const cnDistractor = cnList[i];
+      if (cnDistractor !== correctTextCn && !hqDistractors.includes(cnDistractor)) {
+        hqDistractors.push(cnDistractor);
+      }
+    }
+    
+    // 如果混淆项足够，直接使用
+    if (hqDistractors.length >= 3) {
+      // 随机取3个
+      const selected = hqDistractors.sort(() => Math.random() - 0.5).slice(0, 3);
+      
+      const allOptions = [correctTextCn, ...selected];
+      for (let i = allOptions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allOptions[i], allOptions[j]] = [allOptions[j], allOptions[i]];
+      }
+      
+      const opts = allOptions.map((t, idx) => ({ id: idx + 1, text: t }));
+      return { questionId: randomUUID(), options: opts, prompt: '请选择正确含义', timeLimitSec: 5, correctText: correctTextCn };
+    }
+  }
+
+  // 2. 降级策略：从数据库查找同词性干扰项
   // 改进策略：优先从同词性的词义中选择干扰项
   // 从更大的池子中随机选择，提高随机性和混淆度
   const distractors = await prisma.meaning.findMany({
@@ -252,6 +305,7 @@ export async function makeQuestionForMeaning(meaningId: number) {
   });
 
   // 如果同词性的干扰项不足3个，降级为不限词性
+  let candidateDistractors = distractors;
   if (distractors.length < 3) {
     console.warn(`[makeQuestion] 词义 ${meaningId} 的同词性干扰项不足，降级为不限词性`);
     const fallbackDistractors = await prisma.meaning.findMany({
@@ -262,44 +316,32 @@ export async function makeQuestionForMeaning(meaningId: number) {
       select: { definition: true },
       take: 50
     });
-    
-    // 从候选中随机选3个
-    const shuffled = fallbackDistractors.sort(() => Math.random() - 0.5);
-    const selected = shuffled.slice(0, 3).map(d => d.definition);
-    
-    // 组合并打乱选项
-    const allOptions = [correctText, ...selected];
-    for (let i = allOptions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [allOptions[i], allOptions[j]] = [allOptions[j], allOptions[i]];
-    }
-    
-    const opts = allOptions.map((t, idx) => ({ id: idx + 1, text: t }));
-    return { questionId: randomUUID(), options: opts, prompt: '请选择正确含义', timeLimitSec: 5, correctText };
+    candidateDistractors = fallbackDistractors;
   }
 
-  // 从50个同词性候选中随机选3个作为干扰项
-  const shuffled = distractors.sort(() => Math.random() - 0.5);
+  // 从候选中随机选3个，并提取中文
+  const shuffled = candidateDistractors.sort(() => Math.random() - 0.5);
   
   // 确保不选择与正确答案重复的选项
   const selected: string[] = [];
   for (const d of shuffled) {
     if (selected.length >= 3) break;
-    if (d.definition !== correctText && !selected.includes(d.definition)) {
-      selected.push(d.definition);
+    const distractorCn = extractChinese(d.definition);
+    if (distractorCn !== correctTextCn && !selected.includes(distractorCn)) {
+      selected.push(distractorCn);
     }
   }
   
   // 如果不足3个，继续添加（避免极端情况）
-  while (selected.length < 3 && selected.length < shuffled.length) {
-    const candidate = shuffled[selected.length].definition;
-    if (!selected.includes(candidate) && candidate !== correctText) {
-      selected.push(candidate);
-    }
+  // 注意：这里可能因为去重导致数量不足，需要再次尝试
+  if (selected.length < 3) {
+     // 简单填充，防止死循环
+     selected.push('未知含义');
+     if (selected.length < 3) selected.push('其他含义');
   }
 
   // 组合正确答案和干扰项
-  const allOptions = [correctText, ...selected];
+  const allOptions = [correctTextCn, ...selected];
   
   // 打乱所有选项（Fisher-Yates shuffle）
   for (let i = allOptions.length - 1; i > 0; i--) {
@@ -308,5 +350,5 @@ export async function makeQuestionForMeaning(meaningId: number) {
   }
 
   const opts = allOptions.map((t, idx) => ({ id: idx + 1, text: t }));
-  return { questionId: randomUUID(), options: opts, prompt: '请选择正确含义', timeLimitSec: 5, correctText };
+  return { questionId: randomUUID(), options: opts, prompt: '请选择正确含义', timeLimitSec: 5, correctText: correctTextCn };
 }

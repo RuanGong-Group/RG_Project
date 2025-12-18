@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { learningSessionApi } from '../../../services/api';
 import type { SessionResponse } from '../../../types/api';
+import { parseDefinition, formatPronunciation } from '../../../utils/text';
 
 interface WordSummaryProps {
   sessionResp: SessionResponse;
@@ -68,7 +69,7 @@ export default function WordSummary({
         <h2 className="text-4xl font-bold mb-3">{word.word}</h2>
         {word.pronunciations && (
           <p className="text-gray-600 text-lg mb-4">
-            UK: {word.pronunciations.uk} | US: {word.pronunciations.us}
+            UK: {formatPronunciation(word.pronunciations).uk} | US: {formatPronunciation(word.pronunciations).us}
           </p>
         )}
         <div className="text-5xl mb-4">{summaryIcon}</div>
@@ -78,11 +79,15 @@ export default function WordSummary({
       
       <div className="space-y-4 mb-8">
         <h3 className="text-xl font-semibold">词义总结</h3>
-        {(word.meanings || []).map((m: any, idx: number) => (
-          <div key={m.meaningId || idx} className={`border-l-4 ${borderColor} pl-4 py-3`}>
-            <p className="text-gray-800 text-base">{m.partOfSpeech}. {m.definition}</p>
-          </div>
-        ))}
+        {(word.meanings || []).map((m: any, idx: number) => {
+          const { en, cn } = parseDefinition(m.definition);
+          return (
+            <div key={m.meaningId || idx} className={`border-l-4 ${borderColor} pl-4 py-3`}>
+              <p className="text-gray-800 text-base font-medium">{m.partOfSpeech}. {en}</p>
+              {cn && <p className="text-gray-600 text-sm mt-1">{cn}</p>}
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-8 flex gap-3">
