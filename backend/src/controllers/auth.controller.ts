@@ -141,6 +141,15 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // 更新最后登录时间并增加 token 版本（使旧 token 失效）
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { 
+        lastLoginAt: getBeijingTime(),
+        tokenVersion: { increment: 1 }
+      }
+    });
+
     // 生成 JWT
     const jwtSecret = process.env.JWT_SECRET || 'default-secret-key';
     const jwtExpiresIn = process.env.JWT_EXPIRES_IN || '7d';
@@ -148,17 +157,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const token = jwt.sign(
       { 
         userId: user.id, 
-        username: user.username 
+        username: user.username,
+        tokenVersion: updatedUser.tokenVersion
       },
       jwtSecret,
       { expiresIn: jwtExpiresIn } as jwt.SignOptions
     );
-
-    // 更新最后登录时间
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: getBeijingTime() }
-    });
 
     res.status(200).json({
       success: true,
@@ -267,10 +271,23 @@ export const githubCallback = async (req: Request, res: Response): Promise<void>
       console.log('✅ Existing user found:', { id: user.id, username: user.username });
     }
 
-    // 4. Generate JWT
-    console.log('🔐 Generating JWT token...');
+    // 4. Update token version and generate JWT
+    console.log('🔐 Updating token version and generating JWT...');
+    
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { 
+        lastLoginAt: getBeijingTime(),
+        tokenVersion: { increment: 1 }
+      }
+    });
+
     const token = jwt.sign(
-      { userId: user.id, username: user.username },
+      { 
+        userId: user.id, 
+        username: user.username,
+        tokenVersion: updatedUser.tokenVersion
+      },
       JWT_SECRET,
       { expiresIn: '7d' }
     );

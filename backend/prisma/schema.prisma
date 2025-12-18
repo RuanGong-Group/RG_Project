@@ -16,6 +16,7 @@ model User {
   dailyLearningGoal Int                    @default(10) @map("daily_learning_goal")
   createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamp(0)
   lastLoginAt       DateTime?              @map("last_login_at") @db.Timestamp(0)
+  tokenVersion      Int                    @default(0) @map("token_version")
   githubId          String?                @unique @map("github_id") @db.VarChar(255)
   dailyCheckIns     DailyCheckIn[]
   achievements      UserAchievement[]

@@ -181,15 +181,23 @@ git clone https://github.com/RuanGong-Group/RG_project.git
 cd RG_project
 ```
 
-### 5.3 配置环境变量（可选）
+### 5.3 配置环境变量（重要）
 
 ```bash
-# 如果需要自定义配置，复制示例文件
+# 复制示例文件
 cp backend/.env.example backend/.env
 
-# 编辑配置（可选）
+# 编辑配置
 nano backend/.env
-# 按 Ctrl+X 退出，选择 Y 保存
+
+# ⚠️ 关键修改点：
+# 1. 数据库连接：确保 DATABASE_URL 指向 docker-compose 中的 db 服务
+#    例如：mysql://root:password@db:3306/rg_vocabulary
+#
+# 2. Python 路径：Linux 容器内通常是 python3
+#    添加或修改：PYTHON_EXECUTABLE_PATH=python3
+#
+# 3. 豆包/腾讯云 API Key：填入您的真实 Key
 ```
 
 ### 5.4 启动服务
@@ -197,6 +205,12 @@ nano backend/.env
 ```bash
 # 启动所有 Docker 容器
 docker-compose up -d
+
+# 💡 说明：
+# docker-compose 会自动挂载 ./RG_data 目录
+# 这意味着生成的视频文件会保存在服务器的硬盘上
+# 即使删除容器，视频文件也不会丢失
+```
 
 # 查看启动日志
 docker-compose logs -f
@@ -344,7 +358,7 @@ docker exec rg_backend rm -rf /app/RG_data/audio/*
 
 ---
 
-## 第九步：Git 提交
+## 第九步：Git 提交与更新
 
 ### 9.1 在本地（开发机）提交代码
 
@@ -356,21 +370,16 @@ git status
 # 添加所有修改
 git add .
 
-# 提交
-git commit -m "feat(v3.1): 优化每日目标计算和视频生成逻辑
+# 提交（本次更新内容）
+git commit -m "feat: 添加单词发音功能并修复视频生成逻辑
 
-- 每日目标计算包含新学习和复习总数
-- 复习无上限，新学习受目标限制
-- 视频生成支持纯复习场景
-- 优化部署文档和需求文档
-- 修复豆包 API watermark 参数问题"
+- Frontend: 集成 Web Speech API，支持英/美音发音 (QuestionResultCard, SessionHeader)
+- Backend: 修复答题判定逻辑 (提取中文释义)
+- VideoGen: 优化 Python 脚本，实现音频并行生成，提升速度
+- Config: 移除 spawn shell:true 选项以兼容 Windows"
 
 # 推送到远程
-git push origin dev
-
-# 打版本标签
-git tag v3.1.0
-git push origin v3.1.0
+git push origin main
 ```
 
 ### 9.2 云服务器拉取最新代码
@@ -383,10 +392,9 @@ ssh ubuntu@你的服务器IP
 cd ~/RG_project
 
 # 拉取最新代码
-git pull origin dev
+git pull origin main
 
-# 重启服务
-docker-compose down
+# 重建并重启服务（确保 Dockerfile 变动生效）
 docker-compose up -d --build
 ```
 

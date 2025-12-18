@@ -23,6 +23,21 @@ const getSafeSentence = (exampleObj: any): string => {
   return String(s);
 };
 
+// Helper to extract Chinese from definition (consistent with session.service.ts)
+const extractChinese = (text: string): string => {
+  if (!text) return '';
+  // 尝试按分号分割
+  const parts = text.split(/;|；/);
+  // 优先返回包含中文的部分
+  for (const part of parts) {
+    if (/[\u4e00-\u9fa5]/.test(part)) {
+      return part.trim();
+    }
+  }
+  // 如果没有中文，返回原文本
+  return text;
+};
+
 export const startSession = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId || 1;
@@ -225,6 +240,13 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
     const session = SessionService.sessionStore.get(sessionId);
     if (!session) return res.status(404).json({ success: false, message: 'Session 未找到' });
 
+    // 安全检查：确保 Session 属于当前用户
+    const userId = req.user?.userId;
+    if (session.userId !== userId) {
+      console.warn(`⚠️ Security Alert: User ${userId} tried to access session ${sessionId} belonging to User ${session.userId}`);
+      return res.status(403).json({ success: false, message: '无权访问此 Session' });
+    }
+
     if (action === 'choosePath') {
       const pathChoice = payload && payload.path;
       session.lastPath = pathChoice;
@@ -400,12 +422,13 @@ export const actionSession = async (req: AuthRequest, res: Response) => {
       // 如果前端传了 selectedOptionText，直接比对定义
       let isCorrect = false;
       if (selectedOptionText) {
-        isCorrect = selectedOptionText === m.definition;
+        // 修复：比对提取出的中文释义，而不是完整释义
+        isCorrect = selectedOptionText === extractChinese(m.definition);
       } else {
         // 兼容旧逻辑（不推荐，仍有随机性 Bug）
         const q = await SessionService.makeQuestionForMeaning(meaningId);
         const selected = q.options.find((o: any) => o.id === selectedOptionId);
-        isCorrect = !!(selected && selected.text === m.definition);
+        isCorrect = !!(selected && selected.text === extractChinese(m.definition));
       }
 
       const meaningKey = `meaning:${m.id}`;
@@ -742,6 +765,13 @@ export const getSessionState = async (req: AuthRequest, res: Response) => {
     const sessionId = req.params.sessionId;
     const session = SessionService.sessionStore.get(sessionId);
     if (!session) return res.status(404).json({ success: false, message: 'Session 未找到' });
+
+    // 安全检查：确保 Session 属于当前用户
+    const userId = req.user?.userId;
+    if (session.userId !== userId) {
+      return res.status(403).json({ success: false, message: '无权访问此 Session' });
+    }
+
     return res.json({ success: true, data: { sessionId: session.id, state: session.state, currentStep: session.step, queueSummary: { boosterPending: session.boosters.length, reviewsPending: 0, newPending: 0 } } });
   } catch (error) {
     console.error('getSessionState error', error);
@@ -755,6 +785,13 @@ export const getNextQuestions = async (req: AuthRequest, res: Response) => {
     const sessionId = req.params.sessionId;
     const session = SessionService.sessionStore.get(sessionId);
     if (!session) return res.status(404).json({ success: false, message: 'Session 未找到' });
+
+    // 安全检查：确保 Session 属于当前用户
+    const userId = req.user?.userId;
+    if (session.userId !== userId) {
+      return res.status(403).json({ success: false, message: '无权访问此 Session' });
+    }
+
     const count = parseInt(req.query.count as string) || 3;
     
     // 重要：每次调用 getNextQuestions 时推进步骤，检查 Booster 是否到期

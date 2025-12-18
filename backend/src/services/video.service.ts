@@ -78,7 +78,10 @@ export class VideoService {
 
     console.log(`[VideoService] Starting job ${jobId} with ${words.length} words...`);
     console.log(`[VideoService] Script path: ${PYTHON_SCRIPT_PATH}`);
+    console.log(`[VideoService] Python command: ${pythonCmd}`);
 
+    // Use spawn without shell: true to avoid Windows cmd.exe quoting issues
+    // This requires pythonCmd to be an absolute path or in PATH, which we ensured via getPythonCommand()
     const process = spawn(pythonCmd, [
       PYTHON_SCRIPT_PATH,
       '--words', wordsJson,

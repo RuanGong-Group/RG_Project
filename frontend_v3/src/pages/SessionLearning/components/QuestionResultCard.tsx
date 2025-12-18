@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { learningSessionApi } from '../../../services/api';
 import type { SessionResponse } from '../../../types/api';
+import { parseDefinition, formatPronunciation } from '../../../utils/text';
 
 interface QuestionResultCardProps {
   sessionResp: SessionResponse;
@@ -65,6 +66,26 @@ export default function QuestionResultCard({
     }
   };
 
+  const handlePlayAudio = (text: string, type: 'uk' | 'us' = 'us') => {
+    if (!text) return;
+    // 简单使用浏览器自带的语音合成
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = type === 'uk' ? 'en-GB' : 'en-US';
+    
+    // 尝试查找特定的声音
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      const targetLang = type === 'uk' ? 'en-GB' : 'en-US';
+      const preferredVoice = voices.find(v => v.lang === targetLang);
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+    }
+    
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  };
+
   // 根据mode和booster状态确定主题色
   const cardBg = isBooster ? themeColors.bg : (sessionMode === 'review-only' ? 'bg-emerald-50' : 'bg-amber-50');
   const cardBorder = isBooster ? themeColors.border : (sessionMode === 'review-only' ? 'border-emerald-200' : 'border-amber-200');
@@ -89,33 +110,57 @@ export default function QuestionResultCard({
           </h2>
           {card.pronunciations && (
             <div className="flex justify-center gap-4 text-sm text-gray-600">
-              {card.pronunciations.uk && (
-                <span>🇬🇧 {card.pronunciations.uk}</span>
+              {formatPronunciation(card.pronunciations).uk && (
+                <span 
+                  className="cursor-pointer hover:text-blue-600 transition-colors"
+                  onClick={() => handlePlayAudio(card.word, 'uk')}
+                  title="播放发音"
+                >
+                  🇬🇧 {formatPronunciation(card.pronunciations).uk} 🔊
+                </span>
               )}
-              {card.pronunciations.us && (
-                <span>🇺🇸 {card.pronunciations.us}</span>
+              {formatPronunciation(card.pronunciations).us && (
+                <span 
+                  className="cursor-pointer hover:text-blue-600 transition-colors"
+                  onClick={() => handlePlayAudio(card.word, 'us')}
+                  title="播放发音"
+                >
+                  🇺🇸 {formatPronunciation(card.pronunciations).us} 🔊
+                </span>
               )}
             </div>
           )}
           {/* 如果是拼写题且答错，显示用户的输入 */}
           {!isCorrect && card.userInput && (
-            <p className="mt-2 text-red-500 text-base">
+            <div className="mt-2 text-red-500 text-base">
               <div className="text-red-500 text-lg mb-4">
               你的输入: <span className="font-mono">{card.userInput}</span>
             </div>
-            </p>
+            </div>
           )}
         </div>
       )}
       
       <div className={`mb-6 p-4 md:p-6 rounded-lg border-2 ${cardBg} ${cardBorder}`}>
         <p className="text-sm text-gray-600 mb-1">释义</p>
-        <h3 className="text-xl md:text-2xl font-semibold text-gray-900 mb-2">
-          {card.definition || '(暂无释义)'}
-        </h3>
-        {card.partOfSpeech && (
-          <p className="text-base text-gray-600">{card.partOfSpeech}</p>
-        )}
+        {(() => {
+          const { en, cn } = parseDefinition(card.definition);
+          return (
+            <>
+              <div className="flex items-baseline gap-2 mb-1">
+                {card.partOfSpeech && (
+                  <span className="text-lg font-bold text-gray-500 italic font-serif">
+                    {card.partOfSpeech}.
+                  </span>
+                )}
+                <h3 className="text-xl md:text-2xl font-semibold text-gray-900 font-serif">
+                  {en || '(暂无释义)'}
+                </h3>
+              </div>
+              {cn && <p className="text-lg text-gray-700 mt-2">{cn}</p>}
+            </>
+          );
+        })()}
       </div>
       
       {(card.examples && card.examples.length > 0) && (
@@ -123,8 +168,13 @@ export default function QuestionResultCard({
           <p className="text-sm text-gray-600 mb-2">更多例句</p>
           {card.examples.map((ex: any, idx: number) => (
             <div key={ex.id || idx} className="mt-2 pl-4 border-l-2 border-gray-300">
-              <p className="text-gray-700 text-sm md:text-base italic leading-relaxed">
+              <p className="text-gray-700 text-sm md:text-base italic leading-relaxed font-serif">
                 {ex.sentence || ex}
+                <span 
+                  className="inline-block ml-2 cursor-pointer text-gray-400 hover:text-gray-600 select-none" 
+                  title="播放发音"
+                  onClick={() => handlePlayAudio(ex.sentence || ex)}
+                >🔊</span>
               </p>
               {ex.translation && (
                 <p className="text-gray-500 text-xs md:text-sm mt-1">

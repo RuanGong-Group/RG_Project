@@ -14,21 +14,21 @@ export default function QuestionShowSentence({ handleChoosePath, continueLoading
         <button 
           onClick={() => handleChoosePath('A')} 
           disabled={continueLoading} 
-          className="flex-1 px-8 py-4 bg-[#E8D5C4] hover:bg-[#D4A574] text-[#4A4A4A] hover:text-white text-base md:text-lg font-semibold rounded-lg disabled:opacity-50 transition-all hover:shadow-md"
+          className="flex-1 px-8 py-4 bg-green-50 hover:bg-green-100 text-green-700 border-2 border-green-200 hover:border-green-300 text-base md:text-lg font-semibold rounded-lg disabled:opacity-50 transition-all hover:shadow-md"
         >
           我认识
         </button>
         <button 
           onClick={() => handleChoosePath('B')} 
           disabled={continueLoading} 
-          className="flex-1 px-8 py-4 bg-[#D4A574] hover:bg-[#B8935F] text-white text-base md:text-lg font-semibold rounded-lg disabled:opacity-50 transition-all hover:shadow-md"
+          className="flex-1 px-8 py-4 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-2 border-yellow-200 hover:border-yellow-300 text-base md:text-lg font-semibold rounded-lg disabled:opacity-50 transition-all hover:shadow-md"
         >
           感觉模糊
         </button>
         <button 
           onClick={() => handleChoosePath('C')} 
           disabled={continueLoading} 
-          className="flex-1 px-8 py-4 bg-[#B8935F] hover:bg-[#A67F5E] text-white text-base md:text-lg font-semibold rounded-lg disabled:opacity-50 transition-all hover:shadow-md"
+          className="flex-1 px-8 py-4 bg-red-50 hover:bg-red-100 text-red-700 border-2 border-red-200 hover:border-red-300 text-base md:text-lg font-semibold rounded-lg disabled:opacity-50 transition-all hover:shadow-md"
         >
           不认识
         </button>

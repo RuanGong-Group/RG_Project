@@ -1,19 +1,22 @@
-FROM node:18-slim
+FROM node:18-bullseye
 
-# Optimize for China network: Replace Debian sources with Aliyun mirrors
-RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources \
-    && sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources
+# 云端构建加速：切换到阿里云镜像（本地若不需要可注释掉）
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list || true \
+ && sed -i 's|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list || true
 
-# Install Python, pip, FFmpeg, fonts, and TTS engine
-# fonts-wqy-microhei: Chinese font fallback
-# espeak-ng: Text-to-speech engine (required by pyttsx3 as gTTS fallback in China)
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    ffmpeg \
-    fonts-wqy-microhei \
-    espeak-ng \
-    && rm -rf /var/lib/apt/lists/*
+# Install Python, pip, FFmpeg, fonts, and system libraries（附带重试，避免偶发网络超时）
+RUN set -eux; \
+    for i in 1 2 3; do apt-get update && break || sleep 3; done; \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        ffmpeg \
+        fonts-wqy-zenhei \
+        espeak-ng \
+        imagemagick \
+        libgl1-mesa-glx \
+    ; \
+    rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -24,9 +27,9 @@ RUN npm config set registry https://registry.npmmirror.com
 RUN npm install
 
 # Copy Python requirements and install Python dependencies
-# We copy the specific requirements file to a temp location first to cache this layer
 COPY scripts/video_gen/requirements.txt ./scripts/video_gen/requirements.txt
-RUN pip3 install -r scripts/video_gen/requirements.txt --break-system-packages -i https://pypi.tuna.tsinghua.edu.cn/simple
+# Note: Bullseye uses Python 3.9, standard pip usually doesn't enforce break-system-packages
+RUN pip3 install -r scripts/video_gen/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # Copy the rest of the application code
 COPY . .

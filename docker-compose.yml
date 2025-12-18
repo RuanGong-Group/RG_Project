@@ -13,8 +13,8 @@ services:
       - DATABASE_URL=mysql://root:password@db:3306/rg_vocabulary
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      # Ensure Python script knows it's in Docker/Cloud if needed, 
-      # though we rely on env vars for paths mostly.
+      # Docker 环境下强制使用 python3
+      - PYTHON_EXECUTABLE_PATH=python3
       - LOCAL_STORAGE_PATH=/app/RG_data
     depends_on:
       - db
@@ -33,7 +33,7 @@ services:
     container_name: rg_frontend
     restart: always
     ports:
-      - "8080:80"
+      - "8080:80"  # 生产环境使用8080，本地开发可改为9000避免端口冲突
     depends_on:
       - backend
 
@@ -45,7 +45,7 @@ services:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: rg_vocabulary
     ports:
-      - "3306:3306"
+      - "3306:3306"  # 生产环境使用3306，本地开发可改为3307避免与本地MySQL冲突
     volumes:
       - db_data:/var/lib/mysql
       # 注释掉自动初始化，改用手动导入

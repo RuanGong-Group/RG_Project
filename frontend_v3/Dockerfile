@@ -6,6 +6,9 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json* ./
 
+# Configure npm registry
+RUN npm config set registry https://registry.npmmirror.com
+
 # Install dependencies
 RUN npm install
 

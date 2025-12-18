@@ -13,7 +13,8 @@ export const generateVideo = async (req: Request, res: Response, next: NextFunct
 
     // 1. 每日限制检查
     const todayJob = await VideoService.getTodayJob(userId);
-    if (todayJob) {
+    // Allow retry if the previous job failed
+    if (todayJob && todayJob.status !== 'failed') {
       return res.status(200).json({
         status: 'success',
         message: 'Today\'s video already generated',
@@ -78,7 +79,8 @@ export const getTodayVideo = async (req: Request, res: Response, next: NextFunct
     res.status(200).json({
       status: 'success',
       data: {
-        hasGenerated: !!job,
+        // Only consider it "generated" if it completed successfully
+        hasGenerated: !!job && job.status === 'completed',
         job
       }
     });
