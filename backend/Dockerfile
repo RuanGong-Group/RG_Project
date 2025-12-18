@@ -1,18 +1,22 @@
 FROM node:18-bullseye
 
-# 云服务器构建时使用阿里云镜像加速（本地Windows构建可删除此行）
-RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources || true
+# 云端构建加速：切换到阿里云镜像（本地若不需要可注释掉）
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list || true \
+ && sed -i 's|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list || true
 
-# Install Python, pip, FFmpeg, fonts, and system libraries
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    ffmpeg \
-    fonts-wqy-zenhei \
-    espeak-ng \
-    imagemagick \
-    libgl1-mesa-glx \
-    && rm -rf /var/lib/apt/lists/*
+# Install Python, pip, FFmpeg, fonts, and system libraries（附带重试，避免偶发网络超时）
+RUN set -eux; \
+    for i in 1 2 3; do apt-get update && break || sleep 3; done; \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        ffmpeg \
+        fonts-wqy-zenhei \
+        espeak-ng \
+        imagemagick \
+        libgl1-mesa-glx \
+    ; \
+    rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
