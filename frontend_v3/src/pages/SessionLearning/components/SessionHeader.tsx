@@ -110,7 +110,11 @@ export default function SessionHeader({ contextInfo, sessionType, themeColors }:
             {/* 播放按钮 - 放在右下角或跟随文本 */}
             <div className="mt-4 flex justify-center">
                <button 
-                 onClick={() => handlePlayAudio(sentence, 'us')}
+                 onClick={() => {
+                   // 移除下划线后再朗读（拼写题中的空白处不会被读出）
+                   const cleanSentence = sentence.replace(/_+/g, ' ');
+                   handlePlayAudio(cleanSentence, 'us');
+                 }}
                  className="text-gray-400 hover:text-blue-600 transition-colors p-2 rounded-full hover:bg-gray-100"
                  title="播放例句"
                >
