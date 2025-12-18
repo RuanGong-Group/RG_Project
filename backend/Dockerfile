@@ -1,5 +1,8 @@
 FROM node:18-bullseye
 
+# 云服务器构建时使用阿里云镜像加速（本地Windows构建可删除此行）
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources || true
+
 # Install Python, pip, FFmpeg, fonts, and system libraries
 RUN apt-get update && apt-get install -y \
     python3 \
