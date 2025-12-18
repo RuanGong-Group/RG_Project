@@ -33,7 +33,7 @@ services:
     container_name: rg_frontend
     restart: always
     ports:
-      - "9000:80"
+      - "8080:80"  # 生产环境使用8080，本地开发可改为9000避免端口冲突
     depends_on:
       - backend
 
@@ -45,7 +45,7 @@ services:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: rg_vocabulary
     ports:
-      - "3307:3306"
+      - "3306:3306"  # 生产环境使用3306，本地开发可改为3307避免与本地MySQL冲突
     volumes:
       - db_data:/var/lib/mysql
       # 注释掉自动初始化，改用手动导入
